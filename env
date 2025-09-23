@@ -1,0 +1,5 @@
+KITE_API_KEY=175722d7dzbcd8t4
+KITE_API_SECRET=akboz1c5fu5hp06ybu360ong73c3zpw8
+KITE_REDIRECT_URL=https://laughing-space-rotary-phone-g59jj4v55v6c95qr-5000.app.github.dev/callback
+KITE_POSTBACK_URL=https://laughing-space-rotary-phone-g59jj4v55v6c95qr-5000.app.github.dev/postback
+KITE_DEBUG=true

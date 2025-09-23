@@ -57,6 +57,23 @@ Full flow will:
 5. Runs endpoint tests (profile, margins, etc.)
 6. Optional interactive mode
 
+## 🔒 Token Lifecycle & Daily Login
+
+- **Do I need to log in daily?** Yes. You must obtain a new access token each trading day. The saved token stops working after market close (~3:30 PM IST), so the next day you repeat the login/exchange once.
+- **Request token (short‑lived, single‑use)**: You get this only after logging in via the Kite login URL. Use it immediately to exchange for an access token.
+- **Access token (used by your code)**: Returned after exchanging the request token. Set it on the client and use it for API calls for the rest of the day. It expires daily.
+- **API key vs API secret**:
+  - API key: Public identifier of your app; used to init SDK and generate login URL.
+  - API secret: Private credential; used only to exchange the request token for an access token. Keep it server‑side.
+
+Daily flow:
+- Generate login URL → user logs in → receive `request_token` on the redirect URL → exchange with `api_secret` → get `access_token` → use it for all API calls that day.
+
+Utilities in this repo:
+- `kite_api_test.py`: Full auth + endpoint tests, quick checks, and interactive mode.
+- `quick_kite_test.py`: Quick pre‑auth checks; add `--full` for a minimal authenticated sanity test.
+- `kite_token_manager.py`: Guided auth with token save/reuse for the day.
+
 ## 🧪 Available Tests
 
 ### Quick Validation (within `kite_api_test.py --quick`)
@@ -75,6 +92,49 @@ Full flow will:
 - 🏛️ Instruments
 - 📊 Live quotes
 - 🎮 Interactive mode
+
+## 📜 Historical Data (OHLC) Usage
+
+Historical endpoints use the same daily access token. Authenticate once per trading day, then call the historical APIs.
+
+Example: authenticate and fetch last 30 days of daily candles for RELIANCE
+```python
+from datetime import datetime, timedelta
+from kiteconnect import KiteConnect
+from env_loader import get_kite_config
+
+cfg = get_kite_config()
+kite = KiteConnect(api_key=cfg['api_key'])
+
+# Step 1: Open this URL in browser, log in, copy request_token from redirect
+print("Login URL:", kite.login_url())
+request_token = input("Enter request_token: ").strip()
+
+# Step 2: Exchange for access token (daily)
+data = kite.generate_session(request_token, cfg['api_secret'])
+kite.set_access_token(data['access_token'])
+
+# Step 3: Resolve an instrument token (e.g., RELIANCE on NSE)
+instruments = kite.instruments("NSE")
+instrument_token = next(i['instrument_token'] for i in instruments if i['tradingsymbol'] == 'RELIANCE')
+
+# Step 4: Fetch historical data (last 30 days, daily candles)
+to_date = datetime.now()
+from_date = to_date - timedelta(days=30)
+bars = kite.historical_data(
+    instrument_token=instrument_token,
+    from_date=from_date,
+    to_date=to_date,
+    interval="day"
+)
+
+print(f"Fetched {len(bars)} bars. Latest close:", bars[-1]['close'] if bars else None)
+```
+
+Notes:
+- You can reuse the same `access_token` for intraday intervals (e.g., `5minute`, `15minute`) until daily expiry.
+- Resolve `instrument_token` once and cache it to avoid repeated instrument downloads.
+- Rate limits apply; batch your requests accordingly.
 
 ## 🌐 Server Components
 
