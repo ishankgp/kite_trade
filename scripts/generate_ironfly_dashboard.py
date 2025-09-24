@@ -28,22 +28,35 @@ def parse_event_log(event_log_path: str) -> list:
             line = line.strip()
             if not line:
                 continue
-            parts = line.split(',', 5)
-            if len(parts) < 5:
+            parts = line.split(',', 3)
+            if len(parts) < 4:
                 continue
-            timestamp, position_id, event_type, details_raw, pnl_realized = parts[:5]
-            order_ids_chunk = parts[5] if len(parts) > 5 else ''
+            timestamp, position_id, event_type, rest = parts
+
+            if not rest.startswith('"'):
+                continue
+
+            end_idx = rest.rfind('",0')
+            if end_idx == -1:
+                continue
+            details_raw = rest[1:end_idx]
+            tail = rest[end_idx+3:]  # skip ",0
+            if tail.startswith(','):
+                tail = tail[1:]
+            order_ids = [oid for oid in tail.split(',') if oid]
+
             try:
-                details_json = json.loads(details_raw.strip('"'))
+                details_json = json.loads(details_raw)
             except json.JSONDecodeError:
                 continue
+
             entries.append({
                 'timestamp': timestamp,
                 'position_id': position_id,
                 'event_type': event_type,
                 'details': details_json,
-                'pnl_realized': pnl_realized,
-                'order_ids': [oid for oid in order_ids_chunk.split(',') if oid]
+                'pnl_realized': 0,
+                'order_ids': order_ids
             })
     return entries
 
