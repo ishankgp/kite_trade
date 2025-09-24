@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phoenix Iron Fly Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 24px 32px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(17, 94, 89, 0.3));
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      backdrop-filter: blur(16px);
+    }
+    header h1 {
+      margin: 0 0 4px;
+      font-size: 24px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+    header p {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    main {
+      flex: 1;
+      padding: 24px 32px 48px;
+      display: grid;
+      gap: 24px;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 50px -20px rgba(15, 23, 42, 0.8);
+    }
+    .card h2 {
+      margin: 0 0 16px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+    .grid-two {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.6);
+      color: #e2e8f0;
+      font-size: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus, select:focus, button:focus {
+      outline: none;
+      border-color: rgba(56, 189, 248, 0.6);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+    }
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.45));
+      border: none;
+    }
+    button:hover {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.45), rgba(14, 165, 233, 0.6));
+    }
+    .status {
+      font-size: 13px;
+      color: #cbd5f5;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+    .metadata-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 6px;
+      font-size: 14px;
+    }
+    .metadata-list li {
+      background: rgba(148, 163, 184, 0.08);
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .charts {
+      display: grid;
+      gap: 24px;
+    }
+    .chart-box {
+      background: rgba(15, 23, 42, 0.65);
+      border-radius: 14px;
+      padding: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.1);
+    }
+    .chart-box h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    footer {
+      padding: 18px 32px;
+      text-align: center;
+      color: #64748b;
+      font-size: 12px;
+      border-top: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    @media (max-width: 768px) {
+      header, main, footer { padding-left: 18px; padding-right: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Phoenix Iron Fly – Interactive Dashboard</h1>
+    <p>Replay simulated Bank Nifty iron-fly runs with live MTM & payoff visuals.</p>
+  </header>
+  <main>
+    <div id="root"></div>
+  </main>
+  <footer>
+    Phoenix Strategy Toolkit • Simulation Only • © 2025
+  </footer>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    const { useState, useEffect } = React;
+
+    const DEFAULT_EVENT_LOG = '../trade_logs/event_log_2025-09.csv';
+
+    function parseEventLog(text) {
+      const lines = text.trim().split(/\r?\n/).slice(1);
+      const entries = [];
+      for (const line of lines) {
+        const parts = line.split(',', 3);
+        if (parts.length < 4) continue;
+        const [timestamp, positionId, eventType, rest] = parts;
+        const detailStart = rest.indexOf('{');
+        const detailEnd = rest.lastIndexOf('}');
+        if (detailStart === -1 || detailEnd === -1) continue;
+        const detailsRaw = rest.slice(detailStart, detailEnd + 1);
+        const tail = rest.slice(detailEnd + 2);
+        try {
+          const details = JSON.parse(detailsRaw);
+          entries.push({ timestamp, positionId, eventType, details, orderIds: tail.split(',').filter(Boolean) });
+        } catch (err) {
+          console.warn('Failed to parse details', err);
+        }
+      }
+      return entries.filter(e => e.eventType === 'ENTRY');
+    }
+
+    function parseCsv(text) {
+      const result = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
+      return result.data.filter(row => row.position_id);
+    }
+
+    function extractStrike(value) {
+      if (typeof value === 'number') return value;
+      const digits = String(value).match(/\d+/g);
+      if (!digits) throw new Error('Cannot parse strike from ' + value);
+      return parseInt(digits.join(''), 10);
+    }
+
+    function computeEntryPrices(rows) {
+      const first = rows[0];
+      return {
+        short_call: first.short_call_ltp,
+        short_put: first.short_put_ltp,
+        long_call: first.long_call_ltp,
+        long_put: first.long_put_ltp,
+      };
+    }
+
+    function computeMtmSeries(rows, entryPrices, lotSize) {
+      return rows.map(row => {
+        const pnlShortCall = (entryPrices.short_call - row.short_call_ltp) * lotSize;
+        const pnlShortPut = (entryPrices.short_put - row.short_put_ltp) * lotSize;
+        const pnlLongCall = (row.long_call_ltp - entryPrices.long_call) * lotSize;
+        const pnlLongPut = (row.long_put_ltp - entryPrices.long_put) * lotSize;
+        return { timestamp: new Date(row.timestamp), mtm: pnlShortCall + pnlShortPut + pnlLongCall + pnlLongPut };
+      });
+    }
+
+    function computePayoff(details, entryPrices) {
+      const strikes = details.strikes;
+      const wing = details.wing_distance || 500;
+      const lotSize = details.lot_size || 15;
+
+      const sc = extractStrike(strikes.short_call);
+      const sp = extractStrike(strikes.short_put);
+      const lc = extractStrike(strikes.long_call);
+      const lp = extractStrike(strikes.long_put);
+
+      const min = Math.min(lp, sp) - wing;
+      const max = Math.max(lc, sc) + wing;
+      const points = [];
+      for (let price = min; price <= max; price += 100) {
+        const pnlShortCall = (entryPrices.short_call - Math.max(0, price - sc)) * lotSize;
+        const pnlShortPut = (entryPrices.short_put - Math.max(0, sp - price)) * lotSize;
+        const pnlLongCall = (Math.max(0, price - lc) - entryPrices.long_call) * lotSize;
+        const pnlLongPut = (Math.max(0, lp - price) - entryPrices.long_put) * lotSize;
+        points.push({ price, payoff: pnlShortCall + pnlShortPut + pnlLongCall + pnlLongPut });
+      }
+      return points;
+    }
+
+    function IronFlyDashboard() {
+      const [eventLogPath, setEventLogPath] = useState(DEFAULT_EVENT_LOG);
+      const [stateLogPath, setStateLogPath] = useState('');
+      const [positionId, setPositionId] = useState('');
+      const [status, setStatus] = useState('');
+      const [metadata, setMetadata] = useState(null);
+
+      const fetchData = async (manual = false) => {
+        try {
+          setStatus(manual ? 'Loading data…' : 'Auto-loading latest logs…');
+
+          const eventText = await fetch(eventLogPath).then(res => {
+            if (!res.ok) throw new Error('Unable to fetch event log');
+            return res.text();
+          });
+          const entries = parseEventLog(eventText);
+          if (!entries.length) throw new Error('No entries found in event log.');
+
+          const entry = positionId ? (entries.find(e => e.positionId === positionId) || entries.at(-1)) : entries.at(-1);
+
+          const eventDate = entry.timestamp.split('T')[0];
+          const derivedStatePath = stateLogPath || `../trade_logs/state_log_${eventDate}.csv`;
+
+          const stateText = await fetch(derivedStatePath).then(res => {
+            if (!res.ok) throw new Error('Unable to fetch state log');
+            return res.text();
+          });
+          const stateRows = parseCsv(stateText).filter(row => row.position_id === entry.positionId);
+          if (!stateRows.length) throw new Error('No matching rows in state log.');
+
+          const entryPrices = computeEntryPrices(stateRows);
+          const mtmSeries = computeMtmSeries(stateRows, entryPrices, entry.details.lot_size || 15);
+          const payoff = computePayoff(entry.details, entryPrices);
+
+          setMetadata({ entry, mtmSeries, payoff, entryPrices, stateRows });
+          setStatus(`Loaded position ${entry.positionId}`);
+        } catch (error) {
+          console.error(error);
+          setStatus(error.message || 'Failed to load data.');
+          setMetadata(null);
+        }
+      };
+
+      useEffect(() => { fetchData(false); }, []);
+      useEffect(() => {
+        if (!metadata) return;
+        const { mtmSeries, payoff } = metadata;
+
+        const mtmTrace = {
+          x: mtmSeries.map(pt => pt.timestamp),
+          y: mtmSeries.map(pt => pt.mtm),
+          mode: 'lines+markers',
+          name: 'MTM (₹)',
+          line: { color: '#38bdf8', width: 2 },
+          marker: { color: '#0ea5e9' },
+        };
+        const payoffTrace = {
+          x: payoff.map(pt => pt.price),
+          y: payoff.map(pt => pt.payoff),
+          mode: 'lines',
+          name: 'Payoff @ Expiry',
+          line: { color: '#34d399', width: 2 },
+        };
+
+        Plotly.react('mtm-chart', [mtmTrace], {
+          margin: { t: 10, r: 16, l: 50, b: 60 },
+          paper_bgcolor: 'rgba(15,23,42,0.65)',
+          plot_bgcolor: 'rgba(15,23,42,0.45)',
+          xaxis: { title: 'Timestamp' },
+          yaxis: { title: 'Mark-to-Market (₹)' },
+        }, { displayModeBar: false });
+
+        Plotly.react('payoff-chart', [payoffTrace], {
+          margin: { t: 10, r: 16, l: 50, b: 60 },
+          paper_bgcolor: 'rgba(15,23,42,0.65)',
+          plot_bgcolor: 'rgba(15,23,42,0.45)',
+          xaxis: { title: 'Underlying Price' },
+          yaxis: { title: 'Payoff at Expiry (₹)' },
+        }, { displayModeBar: false });
+      }, [metadata]);
+
+      return (
+        React.createElement('div', { className: 'dashboard' },
+          React.createElement('div', { className: 'card' },
+            React.createElement('h2', null, 'Data Sources'),
+            React.createElement('div', { className: 'grid-two' },
+              React.createElement('div', null,
+                React.createElement('label', { htmlFor: 'eventLog' }, 'Event Log CSV'),
+                React.createElement('input', {
+                  id: 'eventLog',
+                  value: eventLogPath,
+                  onChange: e => setEventLogPath(e.target.value),
+                  placeholder: '../trade_logs/event_log_YYYY-MM.csv',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { htmlFor: 'stateLog' }, 'State Log CSV (optional)'),
+                React.createElement('input', {
+                  id: 'stateLog',
+                  value: stateLogPath,
+                  onChange: e => setStateLogPath(e.target.value),
+                  placeholder: '../trade_logs/state_log_YYYY-MM-DD.csv',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { htmlFor: 'positionId' }, 'Position ID (optional)'),
+                React.createElement('input', {
+                  id: 'positionId',
+                  value: positionId,
+                  onChange: e => setPositionId(e.target.value),
+                  placeholder: 'BNF_IFLY_YYYYMMDD_HHMMSS',
+                })
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { htmlFor: 'reloadBtn' }, 'Action'),
+                React.createElement('button', { id: 'reloadBtn', onClick: () => fetchData(true) }, 'Reload Data')
+              ),
+            ),
+            React.createElement('div', { className: 'status' }, status)
+          ),
+
+          metadata && React.createElement('div', { className: 'grid-two' },
+            React.createElement('div', { className: 'card' },
+              React.createElement('h2', null, 'Position Snapshot'),
+              React.createElement('ul', { className: 'metadata-list' },
+                React.createElement('li', null, `Position ID: ${metadata.entry.positionId}`),
+                React.createElement('li', null, `Entry Time: ${metadata.entry.timestamp}`),
+                React.createElement('li', null, `Expiry: ${metadata.entry.details.expiry}`),
+                React.createElement('li', null, `ATM Strike: ${metadata.entry.details.atm_strike}`),
+                React.createElement('li', null, `Wing Distance: ${metadata.entry.details.wing_distance} pts`),
+                React.createElement('li', null, `Lot Size: ${metadata.entry.details.lot_size}`),
+              )
+            ),
+            React.createElement('div', { className: 'card charts' },
+              React.createElement('div', { className: 'chart-box' },
+                React.createElement('h3', null, 'Mark-to-Market Timeline'),
+                React.createElement('div', { id: 'mtm-chart', style: { height: '320px' } })
+              ),
+              React.createElement('div', { className: 'chart-box' },
+                React.createElement('h3', null, 'Expiry Payoff Curve'),
+                React.createElement('div', { id: 'payoff-chart', style: { height: '320px' } })
+              )
+            )
+          ),
+
+          !metadata && React.createElement('div', { className: 'card' },
+            React.createElement('p', null, 'No data to display. Provide valid log paths and reload.')
+          )
+        )
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(IronFlyDashboard));
+  </script>
+</body>
+</html>

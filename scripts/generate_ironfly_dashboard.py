@@ -113,6 +113,15 @@ def compute_entry_prices(state_df: pd.DataFrame) -> Dict[str, float]:
     }
 
 
+def extract_strike(value: Any) -> int:
+    if isinstance(value, (int, float)):
+        return int(value)
+    digits = ''.join(ch for ch in str(value) if ch.isdigit())
+    if not digits:
+        raise ValueError(f"Unable to parse strike from {value}")
+    return int(digits)
+
+
 def compute_mtm(series: pd.Series, entry_price: float, lot_size: int, side: str) -> pd.Series:
     if side == 'short':
         return (entry_price - series) * lot_size
@@ -129,16 +138,14 @@ def build_mtm_series(state_df: pd.DataFrame, entry_prices: Dict[str, float], lot
 
 def compute_payoff_curve(details: Dict[str, Any], entry_prices: Dict[str, float]) -> pd.DataFrame:
     strikes = details['strikes']
-    atm = details.get('atm_strike')
-    wing = details.get('wing_distance')
+    wing = details.get('wing_distance', config.WING_DISTANCE_DEFAULT)
     lot_size = details.get('lot_size', config.LOT_SIZE_FALLBACK)
 
-    sc_strike = strikes['short_call'] if isinstance(strikes['short_call'], (int, float)) else int(strikes['short_call'][-5:])
-    sp_strike = strikes['short_put'] if isinstance(strikes['short_put'], (int, float)) else int(strikes['short_put'][-5:])
-    lc_strike = strikes['long_call'] if isinstance(strikes['long_call'], (int, float)) else int(strikes['long_call'][-5:])
-    lp_strike = strikes['long_put'] if isinstance(strikes['long_put'], (int, float)) else int(strikes['long_put'][-5:])
+    sc_strike = extract_strike(strikes['short_call'])
+    sp_strike = extract_strike(strikes['short_put'])
+    lc_strike = extract_strike(strikes['long_call'])
+    lp_strike = extract_strike(strikes['long_put'])
 
-    net_credit_per_unit = entry_prices['short_call'] + entry_prices['short_put'] - entry_prices['long_call'] - entry_prices['long_put']
     price_min = min(lp_strike, sp_strike) - wing
     price_max = max(lc_strike, sc_strike) + wing
     price_points = list(range(price_min, price_max + 100, 100))
@@ -155,7 +162,7 @@ def compute_payoff_curve(details: Dict[str, Any], entry_prices: Dict[str, float]
 
 def build_dashboard(state_df: pd.DataFrame, mtm_series: pd.Series, payoff_df: pd.DataFrame,
                     details: Dict[str, Any], output_path: str) -> None:
-    fig = make_subplots(rows=2, cols=1, shared_x=False, vertical_spacing=0.12,
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=False, vertical_spacing=0.12,
                         subplot_titles=("Mark-to-Market Timeline", "Expiry Payoff Curve"))
 
     fig.add_trace(
