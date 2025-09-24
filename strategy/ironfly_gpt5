@@ -1,0 +1,499 @@
+# BankNifty Iron Fly – Strategy spec for a coding agent (Kite Connect, NSE)
+
+**Objective:** Prioritize **simulation‑first** execution of a conservative, risk‑defined **Iron Butterfly** on **BANKNIFTY monthly options**—paper and live modes—while **recording per‑tick/per‑run metrics across multiple expiries** (P\&L, drawdown, net credit, IV/ATR, adjustments). The system must **manage risk mechanically** (sensible re‑centers, safe %‑credit exits) and **persist versioned logs** (run\_id, config\_hash) so an LLM can review results and **suggest parameter tweaks** (wings distance, bands, profit/SL, timing) that are applied to subsequent runs.
+
+> ⚠️ This spec is written for a smart coding agent (e.g., Cursor). Keep everything **parameterized**. Never hard‑code lot sizes, expiry dates, or symbols – fetch & validate at runtime.
+
+---
+
+## 0) Glossary
+
+* **IFLY**: Iron Fly = Short ATM straddle + long OTM wings (equidistant).
+* **Credit**: Total premium received from shorts – total premium paid for wings.
+* **Max profit**: Net credit × lot size.
+* **Max loss per side**: (Wing distance − net credit) × lot size.
+
+---
+
+## 1) Trading universe & contracts
+
+* Underlying: `BANKNIFTY` (index options, European-style, cash-settled).
+* **Monthly expiries only** (weeklies discontinued). Compute the **current front-month monthly** and **next-month** expiries dynamically.
+* **Tick source**: Kite Ticker (WebSocket). Don’t poll REST every second unless the socket drops; socket updates arrive multiple times per second.
+* **Lot size**: fetch from `instruments()` dump (field `lot_size`) at start-of-day. **Do not hard-code**. Keep a default fallback but block trading if `lot_size` cannot be confirmed.
+* **Tick size**: options tick = ₹0.05 (validate from instruments/quote precision; never assume for order price rounding).
+
+---
+
+## 2) Config (YAML-like; load from env/JSON)
+
+```yaml
+symbol_root: "BANKNIFTY"
+exchange: "NFO"
+product: "NRML"         # for multi-day carry
+
+# Strike/structure
+wings_distance_pts: 1000         # default; allow 700/800/1200 via CLI flag
+use_sigma_wings: true            # if true: wings = round_to_strike(0.8 * daily_ATR), clamped to [700, 1200]
+
+# Risk & exits (per 1 iron-fly set)
+profit_target_pct_of_credit: 0.50     # book 50% of received credit
+hard_stop_loss_mult_of_credit: 1.25   # exit if MTM loss > 1.25× credit
+trailing_lock_pct_of_peak: 0.65       # after >70% of target, trail to lock 65% of peak P&L
+
+# Adjustment logic
+ref_center_band_factor: 0.55          # re-center if |spot - short_strike| > 0.55 * wings_distance
+recenter_min_time_buffer_min: 90      # don’t re-center within first 90 min after entry/last recenter
+recenter_cool_off_min: 60             # cool-down window after any adjust
+max_recenters_per_day: 2
+
+# Liquidity gates (per leg)
+max_spread_rupees: 3.0                 # skip strikes with wide spreads
+min_top3_depth_qty: 1000               # sum of top-3 bid/ask quantities must exceed
+
+# Sizing & capital
+lots_per_set: 1                        # 1 set = lot_size * 1 on each leg
+max_sets: 3                            # scale only if volatility/ATR is favorable
+max_strategy_drawdown_rupees: 200000   # halt if cumulative loss exceeds
+per_order_slippage_rupees: 1.0         # add to bid/ask when computing mid
+
+# Monitoring
+heartbeat_sec: 1                       # internal loop tick; rely on websocket ticks for pricing
+reconnect_backoff_sec: 3
+log_level: "INFO"
+persist_state_path: "./state/ifly_state.json"
+
+# LLM advisor (pre-entry gating only)
+llm:
+  enabled: true
+  model: "gpt-5"                 # ChatGPT 5 (analysis model)
+  timeout_sec: 120
+  confidence_threshold: 0.62     # require >= this confidence to allow entry
+  noop_on_error: true            # if LLM fails or times out → do NOT trade
+  news_adapter: "calendar+headlines"  # summarize RBI/FOMC calendar + optional news API
+```
+
+---
+
+## 2a) Experiment tracking & auto‑tuning (multi‑expiry)
+
+**Goal:** Record every decision/price to evaluate across expiries and let an LLM propose safe parameter tweaks for the **next** runs.
+
+**IDs & versioning**
+
+* `run_id` = UTC `YYYYMMDD‑HHMMSS` + expiry + git short‑sha (if available)
+* `config_hash` = sha256 of normalized config (only accepted keys)
+
+**Storage** (SQLite + Parquet)
+
+* **runs**(run\_id, mode\[paper|live], start\_ts, end\_ts, expiry, symbol, config\_hash)
+* **legs**(leg\_id, run\_id, side\[SHORT/LONG], opt\_type\[CE/PE], strike, qty, avg\_price, open\_ts, close\_ts)
+* **ticks**(run\_id, ts, spot, iv\_atm, atr14, straddle\_mark, wings\_mark, net\_mark, mtm, realized, drawdown, state)
+* **decisions**(run\_id, ts, kind\[ENTER|EXIT|RECENTER|ADJUST|HALT], reason, metrics\_json)
+* **llm\_decisions**(run\_id, ts, enter, confidence, reason, center\_strike, wing\_distance, features\_json)
+* **metrics**(run\_id, credit, pnl\_gross, pnl\_net, max\_dd, win\_rate, avg\_hold\_min, num\_recenters, slippage\_bps)
+
+**Exports**
+
+* `export_run(run_id, fmt=[csv|parquet|json])` → writes `/exports/{run_id}.*`
+* `snapshot_kpis()` → rolling table by expiry for quick cohort comparisons
+
+**Tuning loop (LLM‑assisted, guarded)**
+
+1. After `N` completed runs (default 5), build a compact summary: cohort KPIs + config deltas.
+2. Call ChatGPT‑5: *“Propose small, safe parameter nudges to improve risk‑adjusted P\&L. Keep within bounds.”*
+3. Validate suggestions against **hard ranges** (e.g., `profit_target_pct_of_credit ∈ [0.35,0.7]`, `hard_stop_loss_mult_of_credit ∈ [1.0,1.75]`, `ref_center_band_factor ∈ [0.45,0.7]`, `wings_distance_pts ∈ [700,1200]`).
+4. If valid → persist `config_hash'` and write `tweak_proposal.json`. Apply on next session start only. Human override always allowed.
+
+**APIs**
+
+```python
+record_tick(run_id, snapshot: dict) -> None
+record_decision(run_id, kind: str, reason: str, metrics: dict) -> None
+export_run(run_id, fmt: str) -> Path
+propose_tweaks(kpis: dict) -> dict                  # via LLM
+apply_tweaks_safely(tweaks: dict, cfg) -> NewCfg    # clamp to ranges; bump version
+```
+
+---
+
+## 2b) Visualization & simulation UI (payoff + replay)
+
+**Goal:** Give a dashboard that shows (a) **live payoff** and OI context like your screenshot, (b) a **Replay** to simulate how the market moved and how the engine reacted, and (c) summary KPIs per run.
+
+**Tech options**
+
+* **Python‑native**: `Streamlit`/`Dash` for speed of build (recommended for prototyping).
+* **FE integration**: expose JSON endpoints so your **Next.js** app can render with Plotly.
+
+**Core views**
+
+1. **Payoff Graph** (Plotly dual‑axis)
+
+   * Lines: **On‑expiry payoff** (green) and **mark‑to‑target‑date** (blue) for current position.
+   * Bars (secondary y): **OI Calls/Puts** per strike (optional aggregation to reduce clutter).
+   * Annotations: center strike, breakevens, event windows (RBI/FOMC), current spot.
+   * Controls: center/wings selector (read‑only when in live), toggle `On expiry / On date`.
+
+2. **Replay / Trade Simulation**
+
+   * **Play / Pause / Step** controls; speed ×1/×5/×20.
+   * Timeline overlays: **entry**, **re‑centers**, **profit exits**, **hard‑stops**, **cool‑off** windows.
+   * Panels: (i) Spot & IV, (ii) MTM vs time, (iii) Straddle & wings marks, (iv) P\&L breakdown (realized/unrealized).
+   * Button: **“Simulate”** → choose a past window (e.g., last month’s expiry) and run the engine on historical **spot** candles with a simple options model (sticky‑strike IV). Results recorded as a synthetic `run_id` with mode=`paper`.
+
+3. **Run KPIs**
+
+   * Table of runs by expiry with credit, P\&L, max DD, hold time, #recenters, win rate.
+
+**Service endpoints** (for Dash/Next.js)
+
+```http
+GET /api/run/{run_id}/series/mtm       # ts, spot, mtm, straddle_mark, wings_mark, events
+GET /api/run/{run_id}/payoff           # x(strikes), payoff_expiry, payoff_target
+GET /api/run/{run_id}/events           # [{ts, type, reason, details}]
+POST /api/simulate                     # {start,end,config_overrides?} → new run_id
+```
+
+**Computation helpers**
+
+```python
+compute_payoff(center: int, wings: tuple[int,int], credit: float, lot: int,
+               strikes: list[int], when: "expiry"|"target") -> dict
+replay_run(window: tuple[datetime, datetime], cfg) -> RunId
+series_for_plot(run_id) -> dict  # optimized for FE consumption
+```
+
+**UX notes**
+
+* Always show **current margin** & **VaR** approximations.
+* Color‑code states: neutral (gray), in‑profit (teal), risk (amber), SL (red).
+* Add a small “Download CSV” on each view.
+
+---
+
+## 3) Pre‑trade checks (blockers)
+
+1. **Auth & session** valid (Kite API key+access token refresh).
+2. **Instruments dump** cached for the session; validate presence of BANKNIFTY monthly option series.
+3. **Lot size** detected (`lot_size > 0`).
+4. **Margins**: use `margins()` to verify available funds **> 1.2×** estimated requirement for the set.
+5. **Market window**: only open new positions during **09:25–15:00 IST**; no new entries within last **30 min** of session.
+6. **Event filter**: block fresh entries during major events (FOMC/RBI decision windows). Maintain a simple calendar file; set `enter_block_minutes_before=30`, `after=30`.
+
+---
+
+## 4) Selecting strikes
+
+**Goal:** Short **ATM** CE & PE at nearest tradable strike; buy symmetric wings at `± wings_distance_pts` from ATM.
+
+**Procedure:**
+
+1. Get `spot = ltp("NSE", "BANKNIFTY")`.
+2. Compute `atm_strike = round_to_nearest_available_strike(spot)` using the option chain available in instruments (don’t assume 100-point grid; derive from instrument list).
+3. **Short legs**: `atm_CE`, `atm_PE` for the **front-month monthly** expiry.
+4. **Wing distance**: if `use_sigma_wings`, compute `ATR_14` from underlying daily candles and set `wings_distance_pts = clamp( round_to_strike(0.8 * ATR_14), 700, 1200 )`.
+5. **Long wings**: `atm + wings_distance_pts` (CE) and `atm − wings_distance_pts` (PE).
+6. **Liquidity gates**: For each candidate symbol, fetch quotes with depth. Reject if (a) `best_ask - best_bid > max_spread_rupees`, or (b) `sum(top3_qty) < min_top3_depth_qty`. If rejected, shift strikes outward by one step and re‑check.
+
+---
+
+## 5) Entry
+
+**Order type:** Use **LIMIT** orders near mid with a small edge:
+
+* Shorts at `min(ask, mid + per_order_slippage_rupees)`
+* Longs at `max(bid, mid − per_order_slippage_rupees)`
+
+**Atomicity:** Place **shorts first** (straddle), immediately followed by **wings**. If any wing fails to fill within 2 seconds, **cancel all** and retry as a combo (or use IOC for shorts with tighter limits).
+
+**Validation after fill:**
+
+* Recompute **net credit** & **breakevens** = `center ± net_credit` (points).
+* Persist the position snapshot: legs, avg prices, credit, wing distance, ATR, time.
+
+---
+
+## 6) Risk model & live monitoring
+
+Run a **position engine** that updates on every tick (WebSocket), but throttles computations to \~10 Hz. Keep a 1‑sec heartbeat for housekeeping. **Entry is additionally gated by a pre‑trade LLM advisor (§8.4) which may say “don’t enter”. All exits & adjustments remain purely mechanical.** Run a **position engine** that updates on every tick (WebSocket), but throttles computations to \~10 Hz. Keep a 1‑sec heartbeat for housekeeping.
+
+### 6.1 Derived metrics (per set)
+
+* `straddle_mark = mark(atm_CE_short) + mark(atm_PE_short)`
+* `wings_mark = mark(CE_wing_long) + mark(PE_wing_long)`
+* `net_mark = straddle_mark − wings_mark` (≈ the cost to close; compare to entry credit)
+* `mtm = entry_credit − net_mark` (₹/point × lot\_size)
+* `portfolio_delta` (optional): estimate via Black–Scholes; or cheaper proxy: `Δ ≈ (CE_ivol_slope − PE_ivol_slope)` using 1‑tick finite difference on option prices.
+
+### 6.2 Exit & adjustment rules
+
+**(A) Profit‑take (safe limit)**
+
+* **Target:** close **100%** of the set at `mtm ≥ profit_target_pct_of_credit × entry_credit` (default 50%).
+* If **mtm ≥ 0.7 × entry\_credit**, engage **trailing lock**: if P\&L falls below `trailing_lock_pct_of_peak × peak_mtm` → exit.
+
+**(B) Hard stop**
+
+* Exit entire set if `|mtm| ≥ hard_stop_loss_mult_of_credit × entry_credit` (default 1.25×).
+
+**(C) Re‑center (not too soon / not too late)**
+
+* Time gate: no re‑center in first **90 min**. After each re‑center, **cool‑off 60 min**.
+* Price gate: if `|spot − center_strike| > ref_center_band_factor × wings_distance` (default 0.55×), **re‑center** to new ATM:
+
+  1. Close **both short legs** (marketable limit), keep wings.
+  2. Open a fresh ATM straddle at new center.
+  3. Either **roll** wings to maintain symmetry or convert to **broken‑wing** if margin-sensitive (keep the far wing; move only the near wing).
+* Loss containment: if re‑center triggered **and** `mtm < 0`, cut size to **half** for the next cycle.
+
+**(D) Overnight & gap risk**
+
+* Always carry **both wings** (no naked straddle overnight).
+* If spot closes **outside** `center ± 0.6× wings_distance`, cut **50%** size near close; re‑deploy next day only if back inside band and IV normalizes.
+
+---
+
+## 7) Scaling rules (pyramiding / de‑risking)
+
+* Start with `lots_per_set` (1).
+* Add the **2nd set** only if: realized P\&L ≥ 0, IV rank in middle tercile, and ATR is **not expanding** day‑on‑day.
+* Never run more than `max_sets` concurrently.
+
+---
+
+## 8) Implementation blueprint (Python, `pykiteconnect` + ChatGPT‑5)
+
+### 8.1 Modules
+
+```
+core/
+  auth.py           # login, token refresh, session retry
+  instruments.py    # download/cache instruments; filter BANKNIFTY options
+  marketdata.py     # websocket ticker; LTP cache; 5-depth quote fetcher
+  selector.py       # ATM+wing selection, liquidity gates, ATR calc
+  optionchain.py    # on-the-fly chain: OI, OIΔ, IV, max pain, skew
+  news.py           # calendar + headlines summary (RBI/FOMC/Oil/USDINR)
+  llm.py            # ChatGPT-5 call; schema validation; gating decision
+  risk.py           # MTM calc, P&L, stops, trailing locks, re-centre logic
+  viz.py            # payoff, OI bars, MTM charts (Plotly helpers)
+  sim.py            # historical replay using sticky-strike IV; paper runs
+  api.py            # REST for runs/payoff/events/simulate
+  engine.py         # main state machine & event loop
+  store.py          # json/sqlite persistence of snapshots & logs
+  utils.py          # rounding, strike math, time windows, calendar
+monitor_app/        # Streamlit or Dash frontend (optional Next.js consumer)
+strategies/
+  banknifty_ironfly.py
+```
+
+core/
+auth.py           # login, token refresh, session retry
+instruments.py    # download/cache instruments; filter BANKNIFTY options
+marketdata.py     # websocket ticker; LTP cache; 5-depth quote fetcher
+selector.py       # ATM+wing selection, liquidity gates, ATR calc
+optionchain.py    # build on-the-fly chain: OI, OIΔ, IV, max pain, skew
+news.py           # calendar + headlines summary (RBI/FOMC/Oil/USDINR)
+llm.py            # ChatGPT-5 call; schema validation; gating decision
+order.py          # safe place/modify/cancel with retries and price bands
+risk.py           # MTM calc, P\&L, stops, trailing locks, re-centre logic
+engine.py         # main state machine & event loop
+store.py          # json/sqlite persistence of snapshots & logs
+utils.py          # rounding, strike math, time windows, calendar
+strategies/
+banknifty\_ironfly.py
+
+````
+
+### 8.2 Key functions (signatures)
+
+```python
+select_monthly_expiry(today: date) -> date
+round_to_strike(x: float, strikes: list[int]) -> int
+pick_atm_and_wings(spot: float, strikes: list[int], cfg) -> (atm, ce_wing, pe_wing)
+liquidity_ok(symbol: str, cfg) -> bool
+build_option_chain(expiry: date) -> ChainStats   # greeks≈, OI, OIΔ, IV, max-pain
+summarize_news() -> NewsDigest                   # RBI/FOMC calendar + key headlines
+compose_llm_features(chain: ChainStats, tech: dict, news: NewsDigest) -> dict
+ask_llm_advisor(features: dict, cfg) -> LlmDecision
+place_iron_fly_set(atm: int, wings: tuple[int,int], lots: int, cfg) -> Position
+mark_to_market(pos: Position) -> MTM
+should_recenter(pos: Position, spot: float, tnow: dt, cfg) -> bool
+should_exit_profit(pos: Position, mtm: MTM, cfg) -> bool
+should_exit_stop(pos: Position, mtm: MTM, cfg) -> bool
+recenter(pos: Position, new_center: int, cfg) -> Position
+````
+
+### 8.3 Engine (event loop pseudo)
+
+```python
+while session.active:
+    ticks = ticker.read()              # websocket; updates cache
+    if heartbeat_1s():
+        spot = cache.ltp("NSE:BANKNIFTY")
+        pos = store.load_active()
+
+        if not pos:
+            if pretrade_ok() and time_window_ok():
+                atm, ce_w, pe_w = pick_atm_and_wings(spot, strikes, cfg)
+                chain = build_option_chain(expiry)
+                tech = {"ATR14": atr14, "ma20": ma20, "ma50": ma50, "vol_rank": iv_rank(chain)}
+                news = summarize_news()
+                feats = compose_llm_features(chain, tech, news)
+                decision = ask_llm_advisor(feats, cfg)
+                if decision.enter and decision.confidence >= cfg.llm_confidence_threshold:
+                    if all(liquidity_ok(s, cfg) for s in [atm_ce, atm_pe, ce_w, pe_w]):
+                        pos = place_iron_fly_set(atm, (ce_w, pe_w), cfg.lots_per_set, cfg)
+                        store.save(pos)
+                else:
+                    log.info(f"LLM gating: {decision.reason} (conf={decision.confidence:.2f}) → SKIP entry")
+            continue
+
+        mtm = mark_to_market(pos)
+        if should_exit_profit(pos, mtm, cfg) or should_exit_stop(pos, mtm, cfg):
+            close_all(pos)
+            continue
+
+        if should_recenter(pos, spot, now(), cfg):
+            pos = recenter(pos, new_center=nearest_atm(spot), cfg=cfg)
+            store.save(pos)
+```
+
+### 3a) LLM Entry Gate (ChatGPT‑5) – prompt, feature keys & schema *(cross‑referenced in §5 Entry; conceptually placed after §2 Config for readability)*
+
+> **Feature keys passed to the model:** `atm`, `max_pain`, `iv_atm`, `iv_rank`, `skew_25d`, `oi_total_calls`, `oi_total_puts`, `oi_change_atm_calls`, `oi_change_atm_puts`, `spreads_atm_ce`, `spreads_atm_pe`, `depth_top3_ce`, `depth_top3_pe`, `atr14`, `ma20`, `ma50`, `vol_rank`, `event_window_minutes`, `usdinr`, `brent`
+
+**Purpose:** Analyze **option chain (OI, IV, skew, max‑pain, OIΔ)** + **technical snapshot** + **news digest** and recommend **ENTER / SKIP** and suggested center & wing distance. *This is only an entry gate.*
+
+**Prompt (system):**
+
+> You are an expert Indian index options trader. Analyze BankNifty **monthly** option chain stats, technicals, and near‑term macro/news. Recommend whether to enter a **risk‑defined Iron Fly** now. Consider liquidity (spreads, depth) and avoid entries near major policy headlines. Output strictly in the provided JSON schema.
+
+**Prompt (user JSON):**
+
+```json
+{
+  "spot": 55147.6,
+  "expiry": "2025-09-30",
+  "tech": {"atr14": 980, "ma20": 55210, "ma50": 54980, "vol_rank": 0.42},
+  "chain": {
+    "atm": 55500,
+    "max_pain": 55000,
+    "iv_atm": 10.2,
+    "skew_25d": -0.4,
+    "oi": {"calls": {"55000": 3.1e6, "55500": 2.8e6}, "puts": {"55000": 3.4e6, "54500": 2.7e6}},
+    "oi_change": {"calls": {"55500": 120000}, "puts": {"55000": 150000}},
+    "spreads": {"55000CE": 1.2, "55000PE": 1.0},
+    "depth_top3": {"55000CE": 4500, "55000PE": 5200}
+  },
+  "news": {"calendar": ["RBI policy in 3 days"], "fx": {"usdinr": 88.0}, "oil": 67.5}
+}
+```
+
+**JSON schema (tooling must validate):**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "enter": {"type": "boolean"},
+    "center_strike": {"type": "integer"},
+    "wing_distance": {"type": "integer"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "reason": {"type": "string"},
+    "avoid_until": {"type": "string", "description": "ISO8601 when to recheck if enter=false"}
+  },
+  "required": ["enter", "confidence", "reason"],
+  "additionalProperties": false
+}
+```
+
+**OpenAI call (pseudo‑Python):**
+
+```python
+import json, time, logging
+from openai import OpenAI
+client = OpenAI()  # ensure this model is enabled on your account; see cfg.llm_model
+
+# Structured logger
+log = logging.getLogger("llm")
+
+# System prompt & schema used by ask_llm_advisor()
+SYSTEM_PROMPT = (
+    "You are an expert Indian index options trader. Analyze BankNifty monthly "
+    "option chain stats, technicals, and near-term macro/news. Recommend whether "
+    "to enter a risk-defined Iron Fly now. Consider liquidity (spreads, depth) "
+    "and avoid entries near major policy headlines. Output strictly in the provided JSON schema."
+)
+
+IFLY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "enter": {"type": "boolean"},
+        "center_strike": {"type": "integer"},
+        "wing_distance": {"type": "integer"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reason": {"type": "string"},
+        "avoid_until": {"type": "string"},
+    },
+    "required": ["enter", "confidence", "reason"],
+    "additionalProperties": False,
+}
+
+# Exponential backoff wrapper for rate limits (HTTP 429)
+_orig_create = client.chat.completions.create
+
+def _create_with_backoff(*args, **kwargs):
+    backoff = 1.0
+    for attempt in range(6):  # ~1 + 2 + 4 + 8 + 16 + 32 ≈ 63s max
+        try:
+            resp = _orig_create(*args, **kwargs)
+            # Best-effort log of decision preview
+            try:
+                payload = json.loads(resp.choices[0].message.content)
+                log.info("LLM decision preview enter=%s conf=%.2f reason=%s",
+                         payload.get("enter"), payload.get("confidence"), str(payload.get("reason"))[:120])
+            except Exception:
+                pass
+            return resp
+        except Exception as e:
+            # Detect 429 or rate limit hints
+            msg = str(e).lower()
+            if "429" in msg or "rate limit" in msg:
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 32)
+                continue
+            raise
+    # Final attempt without swallowing
+    return _orig_create(*args, **kwargs)
+
+client.chat.completions.create = _create_with_backoff
+
+def ask_llm_advisor(features, cfg):
+    if not cfg.llm_enabled:
+        return LlmDecision(enter=False, confidence=0.0, reason="LLM disabled")
+    try:
+        resp = client.chat.completions.create(
+            model=cfg.llm_model,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role":"system","content": SYSTEM_PROMPT},
+                {"role":"user","content": json.dumps(features)}
+            ],
+            timeout=cfg.llm_timeout_sec
+        )
+        data = json.loads(resp.choices[0].message.content)
+        validate_json_against_schema(data, IFLY_SCHEMA)
+        return LlmDecision(**data)
+    except Exception as e:
+        log.exception("LLM advisory failed")
+        if cfg.llm_noop_on_error:
+            return LlmDecision(enter=False, confidence=0.0, reason=f"error: {e}")
+        else:
+            return LlmDecision(enter=True, confidence=0.0, reason="fallback-allow")
+```
+
+**Gating rule:** Proceed to place/modify orders **only if** `decision.enter == True` **and** `decision.confidence ≥ llm_confidence_threshold` **and** all **non‑LLM pretrade checks** pass. If `enter == False`, **do nothing** until `avoid_until` or next scheduled recheck.
+
+**Exit & stay criteria:** *unchanged & purely mechanical* (profit target, hard SL, band/re‑center gates in §6.2).
