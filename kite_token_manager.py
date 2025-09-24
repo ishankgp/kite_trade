@@ -31,8 +31,9 @@ REDIRECT_URL = _cfg['redirect_url']
 API_SECRET_DEFAULT = _cfg['api_secret']
 
 # File paths for storing tokens
-ACCESS_TOKEN_FILE = "/workspaces/kite_trade/access_token.json"
-SESSION_DATA_FILE = "/workspaces/kite_trade/session_data.pkl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ACCESS_TOKEN_FILE = os.path.join(BASE_DIR, "access_token.json")
+SESSION_DATA_FILE = os.path.join(BASE_DIR, "session_data.pkl")
 
 class KiteTokenManager:
     def __init__(self, api_key, api_secret=None):
