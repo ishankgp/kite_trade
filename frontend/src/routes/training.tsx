@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { Loader2, Play, Wand2 } from "lucide-react";
 import { TrainingRunResponse, TrainingModelResult } from "../hooks/useTraining";
 
@@ -45,6 +45,7 @@ function TrainingPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [progressTotal, setProgressTotal] = useState(0);
   const [progressCompleted, setProgressCompleted] = useState(0);
+  const progressTotalRef = useRef(0);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [foldEvents, setFoldEvents] = useState<TrainingEvent[]>([]);
   const [results, setResults] = useState<TrainingRunResponse | null>(null);
@@ -107,8 +108,10 @@ function TrainingPage() {
       switch (event.type) {
         case "start":
           setStatusMessage("Initializing models...");
-          setProgressTotal(event.total_folds * event.models.length);
-          setProgressCompleted(0);
+    const total = event.total_folds * event.models.length;
+    progressTotalRef.current = total;
+    setProgressTotal(total);
+    setProgressCompleted(0);
           break;
         case "model_start":
           setCurrentModel(event.model);
@@ -119,7 +122,7 @@ function TrainingPage() {
           break;
         case "fold":
           setFoldEvents((prev) => [...prev, event]);
-          setProgressCompleted((prev) => Math.min(prev + 1, progressTotal));
+          setProgressCompleted((prev) => prev + 1);
           setStatusMessage(
             `Model ${event.model.replace("_", " ")} · fold ${event.data.fold}/${event.data.total_folds}`
           );
@@ -167,7 +170,8 @@ function TrainingPage() {
     setStatusMessage((prev) => (prev ? `${prev} (idle)` : null));
   };
 
-  const progressPercent = progressTotal > 0 ? Math.min(100, Math.round((progressCompleted / progressTotal) * 100)) : 0;
+  const cappedCompleted = progressTotal > 0 ? Math.min(progressCompleted, progressTotal) : progressCompleted;
+  const progressPercent = progressTotal > 0 ? Math.min(100, Math.round((cappedCompleted / progressTotal) * 100)) : 0;
 
   const lastRun = results;
 

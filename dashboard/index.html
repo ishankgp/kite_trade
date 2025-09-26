@@ -554,9 +554,9 @@
                 React.createElement('button', { onClick: () => loadPositionData(true) }, 'Refresh Charts')
               )
             )
+            ),
+            React.createElement('div', { className: 'status' }, status)
           ),
-          React.createElement('div', { className: 'status' }, status)
-        ),
 
         positionData ? React.createElement('div', { className: 'grid-two' },
           React.createElement('div', { className: 'card', id: 'position-details' },

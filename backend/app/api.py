@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from typing import AsyncGenerator, Dict, Optional
@@ -232,4 +233,23 @@ def run_training(request: TrainingRequest):
         ],
     )
 
+
+def _prepare_event_payload(event: Dict[str, object]) -> Dict[str, object]:
+    payload = dict(event)
+    if payload.get("type") == "complete" and isinstance(payload.get("results"), dict):
+        # ensure nested datetimes serialized
+        payload["results"] = _ensure_serialisable(payload["results"])
+    elif payload.get("type") == "fold" and isinstance(payload.get("data"), dict):
+        payload["data"] = _ensure_serialisable(payload["data"])
+    return payload
+
+
+def _ensure_serialisable(value):
+    if isinstance(value, dict):
+        return {key: _ensure_serialisable(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_ensure_serialisable(item) for item in value]
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
 

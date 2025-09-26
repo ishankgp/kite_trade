@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import List
 
 from pydantic import Field
@@ -14,7 +15,7 @@ class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
 
     database_path: str = Field(
-        default=os.path.join("data", "market_data.db"),
+        default=str(Path(__file__).resolve().parents[2] / "data" / "market_data.db"),
         description="Path to SQLite price database created by fetch_price_history.py",
     )
     allowed_origins: List[str] = Field(
