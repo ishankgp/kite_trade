@@ -175,6 +175,39 @@ http://localhost:5050
 
 The HTML app will auto-poll the API (default 30s) to refresh the MTM timeline and expiry payoff. Use the controls at the top to select a position or override log paths when replaying older sessions.
 
+### Historical Price Warehouse
+
+Leverage the official Kite historical data API to build a local, reusable price store.
+
+```bash
+# 1. Ensure your daily access token is valid (run the token manager first)
+python kite_token_manager.py
+
+# 2. Fetch the last year of daily NIFTY 50 candles (default interval=day)
+python scripts/fetch_price_history.py
+
+# Example: add BankNifty options (weekly) with a custom interval and database path
+python scripts/fetch_price_history.py \
+  --instrument "NIFTY BANK" \
+  --instrument "NIFTY 50" \
+  --interval day \
+  --lookback-days 365 \
+  --db-path data/market_data.db
+
+# Example: fetch a specific instrument token at 5-minute granularity
+python scripts/fetch_price_history.py \
+  --instrument-token 256265 \
+  --interval 5minute \
+  --lookback-days 30
+```
+
+Key notes:
+
+- Data lands in `data/market_data.db` (SQLite, WAL mode) with two tables: `instruments` and `price_bars`.
+- Running the script again upserts data—safe to refresh daily or add new symbols incrementally.
+- Use `--instrument` repeatedly for multiple tradingsymbols or pass `--instrument-token` if you already know the token.
+- All requests use `KiteConnect.historical_data` under the hood, so ensure you respect Zerodha’s rate limits.
+
 ## 📚 Kite API Documentation
 
 - **Official Docs**: https://kite.trade/docs/connect/v3/
