@@ -66,4 +66,4 @@ frontend/.vite/
 frontend/.next/
 frontend/.cache/
 frontend/npm-debug.log
-frontend/yarn-error.log
+frontend/yarn-error.logdata/market_data.db
