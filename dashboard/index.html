@@ -8,97 +8,100 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
   <style>
-    :root { color-scheme: light dark; }
+    :root { color-scheme: only light; }
     body {
       font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin: 0;
       padding: 0;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef2ff 100%);
+      color: #1e293b;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
     header {
-      padding: 24px 32px;
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(17, 94, 89, 0.3));
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-      backdrop-filter: blur(16px);
+      padding: 32px 48px;
+      background: linear-gradient(135deg, #6366f1 0%, #0ea5e9 100%);
+      color: #fff;
+      box-shadow: 0 20px 40px -28px rgba(99, 102, 241, 0.6);
     }
     header h1 {
-      margin: 0 0 4px;
-      font-size: 24px;
-      font-weight: 600;
-      color: #f8fafc;
+      margin: 0 0 6px;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
     }
     header p {
       margin: 0;
-      color: #94a3b8;
-      font-size: 14px;
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 15px;
     }
     main {
       flex: 1;
-      padding: 24px 32px 48px;
-      display: grid;
-      gap: 24px;
-      max-width: 1200px;
+      padding: 36px 32px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      max-width: 1400px;
       width: 100%;
       margin: 0 auto;
     }
     .card {
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(148, 163, 184, 0.15);
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 20px 50px -20px rgba(15, 23, 42, 0.8);
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 15px 45px -25px rgba(15, 23, 42, 0.35);
     }
     .card h2 {
       margin: 0 0 16px;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
-      color: #f1f5f9;
+      color: #1e293b;
     }
     .grid-two {
       display: grid;
       gap: 24px;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
     }
     label {
       display: block;
       font-size: 13px;
       margin-bottom: 6px;
-      color: #94a3b8;
+      color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
     input, select, button {
       width: 100%;
       padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      background: rgba(15, 23, 42, 0.6);
-      color: #e2e8f0;
+      border-radius: 12px;
+      border: 1px solid rgba(203, 213, 225, 0.9);
+      background: #f8fafc;
+      color: #1f2937;
       font-size: 14px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     input:focus, select:focus, button:focus {
       outline: none;
-      border-color: rgba(56, 189, 248, 0.6);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+      border-color: rgba(79, 70, 229, 0.6);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
     }
     button {
       cursor: pointer;
       font-weight: 600;
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.45));
+      background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
       border: none;
+      color: #fff;
+      box-shadow: 0 15px 35px -18px rgba(99, 102, 241, 0.6);
     }
     button:hover {
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.45), rgba(14, 165, 233, 0.6));
+      background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
     }
     .status {
-      font-size: 13px;
-      color: #cbd5f5;
-      margin-top: 8px;
+      font-size: 14px;
+      color: #2563eb;
+      margin-top: 12px;
       min-height: 20px;
     }
     .metadata-list {
@@ -110,33 +113,66 @@
       font-size: 14px;
     }
     .metadata-list li {
-      background: rgba(148, 163, 184, 0.08);
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: #f8fafc;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+    .metrics-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+    .metric-tile {
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .metric-tile h4 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: #4338ca;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .metric-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .metric-sub {
+      font-size: 12px;
+      color: #64748b;
     }
     .charts {
       display: grid;
-      gap: 24px;
+      gap: 28px;
     }
     .chart-box {
-      background: rgba(15, 23, 42, 0.65);
-      border-radius: 14px;
-      padding: 16px;
-      border: 1px solid rgba(148, 163, 184, 0.1);
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 20px 24px 24px;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
     }
     .chart-box h3 {
       margin: 0 0 12px;
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 600;
-      color: #e2e8f0;
+      color: #1f2937;
     }
     footer {
-      padding: 18px 32px;
+      padding: 20px 32px;
       text-align: center;
-      color: #64748b;
-      font-size: 12px;
-      border-top: 1px solid rgba(148, 163, 184, 0.15);
+      color: #475569;
+      font-size: 13px;
+      border-top: 1px solid rgba(203, 213, 225, 0.6);
+      background: rgba(255, 255, 255, 0.78);
     }
     @media (max-width: 768px) {
       header, main, footer { padding-left: 18px; padding-right: 18px; }
@@ -158,223 +194,412 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script>
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useMemo } = React;
 
-    const DEFAULT_EVENT_LOG = '../trade_logs/event_log_2025-09.csv';
+    const DEFAULT_REFRESH_SECONDS = 30;
 
-    function parseEventLog(text) {
-      const lines = text.trim().split(/\r?\n/).slice(1);
-      const entries = [];
-      for (const line of lines) {
-        const parts = line.split(',', 3);
-        if (parts.length < 4) continue;
-        const [timestamp, positionId, eventType, rest] = parts;
-        const detailStart = rest.indexOf('{');
-        const detailEnd = rest.lastIndexOf('}');
-        if (detailStart === -1 || detailEnd === -1) continue;
-        const detailsRaw = rest.slice(detailStart, detailEnd + 1);
-        const tail = rest.slice(detailEnd + 2);
-        try {
-          const details = JSON.parse(detailsRaw);
-          entries.push({ timestamp, positionId, eventType, details, orderIds: tail.split(',').filter(Boolean) });
-        } catch (err) {
-          console.warn('Failed to parse details', err);
+    function buildQuery(params) {
+      const search = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value) search.set(key, value);
+      });
+      const result = search.toString();
+      return result ? `?${result}` : '';
+    }
+
+    function calculateMetrics(payload) {
+      const mtmSeries = payload?.mtm_series ?? [];
+      if (!mtmSeries.length) {
+        return null;
+      }
+
+      let maxMtm = -Infinity;
+      let minMtm = Infinity;
+      let maxMtmTime = null;
+      let maxDrawdown = 0;
+      let maxDdTime = null;
+      let peak = mtmSeries[0].mtm ?? 0;
+      const drawdownSeries = [];
+
+      mtmSeries.forEach(point => {
+        const value = point.mtm ?? 0;
+        if (value > maxMtm) {
+          maxMtm = value;
+          maxMtmTime = point.timestamp;
+        }
+        if (value < minMtm) {
+          minMtm = value;
+        }
+
+        if (value > peak) {
+          peak = value;
+        }
+        const drawdown = peak - value;
+        drawdownSeries.push({ timestamp: point.timestamp, drawdown });
+        if (drawdown > maxDrawdown) {
+          maxDrawdown = drawdown;
+          maxDdTime = point.timestamp;
+        }
+      });
+
+      const netMtm = mtmSeries.at(-1).mtm ?? 0;
+
+      const entry = payload.position.details;
+      const entryPrices = payload.entry_prices ?? {};
+      const lotSize = entry.lot_size ?? 1;
+      const qty = lotSize;
+      const credit = ((entryPrices.short_call ?? 0) + (entryPrices.short_put ?? 0) - (entryPrices.long_call ?? 0) - (entryPrices.long_put ?? 0)) * qty;
+
+      const payoff = payload.payoff ?? [];
+      const breakevens = [];
+      for (let i = 1; i < payoff.length; i += 1) {
+        const prev = payoff[i - 1];
+        const current = payoff[i];
+        if ((prev.payoff <= 0 && current.payoff >= 0) || (prev.payoff >= 0 && current.payoff <= 0)) {
+          const slope = (current.payoff - prev.payoff) / (current.underlying - prev.underlying || 1);
+          const intercept = prev.payoff - slope * prev.underlying;
+          const x = slope === 0 ? prev.underlying : -intercept / slope;
+          breakevens.push(Math.round(x));
         }
       }
-      return entries.filter(e => e.eventType === 'ENTRY');
-    }
 
-    function parseCsv(text) {
-      const result = Papa.parse(text, { header: true, dynamicTyping: true, skipEmptyLines: true });
-      return result.data.filter(row => row.position_id);
-    }
-
-    function extractStrike(value) {
-      if (typeof value === 'number') return value;
-      const digits = String(value).match(/\d+/g);
-      if (!digits) throw new Error('Cannot parse strike from ' + value);
-      return parseInt(digits.join(''), 10);
-    }
-
-    function computeEntryPrices(rows) {
-      const first = rows[0];
       return {
-        short_call: first.short_call_ltp,
-        short_put: first.short_put_ltp,
-        long_call: first.long_call_ltp,
-        long_put: first.long_put_ltp,
+        net_mtm: netMtm,
+        max_mtm: maxMtm,
+        max_mtm_time: maxMtmTime,
+        min_mtm: minMtm,
+        max_drawdown: -Math.abs(maxDrawdown),
+        max_dd_time: maxDdTime,
+        drawdown_series: drawdownSeries,
+        initial_credit: credit,
+        breakeven_prices: Array.from(new Set(breakevens)).sort((a, b) => a - b),
       };
     }
 
-    function computeMtmSeries(rows, entryPrices, lotSize) {
-      return rows.map(row => {
-        const pnlShortCall = (entryPrices.short_call - row.short_call_ltp) * lotSize;
-        const pnlShortPut = (entryPrices.short_put - row.short_put_ltp) * lotSize;
-        const pnlLongCall = (row.long_call_ltp - entryPrices.long_call) * lotSize;
-        const pnlLongPut = (row.long_put_ltp - entryPrices.long_put) * lotSize;
-        return { timestamp: new Date(row.timestamp), mtm: pnlShortCall + pnlShortPut + pnlLongCall + pnlLongPut };
-      });
-    }
-
-    function computePayoff(details, entryPrices) {
-      const strikes = details.strikes;
-      const wing = details.wing_distance || 500;
-      const lotSize = details.lot_size || 15;
-
-      const sc = extractStrike(strikes.short_call);
-      const sp = extractStrike(strikes.short_put);
-      const lc = extractStrike(strikes.long_call);
-      const lp = extractStrike(strikes.long_put);
-
-      const min = Math.min(lp, sp) - wing;
-      const max = Math.max(lc, sc) + wing;
-      const points = [];
-      for (let price = min; price <= max; price += 100) {
-        const pnlShortCall = (entryPrices.short_call - Math.max(0, price - sc)) * lotSize;
-        const pnlShortPut = (entryPrices.short_put - Math.max(0, sp - price)) * lotSize;
-        const pnlLongCall = (Math.max(0, price - lc) - entryPrices.long_call) * lotSize;
-        const pnlLongPut = (Math.max(0, lp - price) - entryPrices.long_put) * lotSize;
-        points.push({ price, payoff: pnlShortCall + pnlShortPut + pnlLongCall + pnlLongPut });
+    function formatCurrency(value) {
+      if (value === null || value === undefined || Number.isNaN(value)) {
+        return '—';
       }
-      return points;
+      const formatter = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+      const sign = value >= 0 ? '' : '-';
+      return `${sign}₹${formatter.format(Math.abs(value))}`;
     }
 
     function IronFlyDashboard() {
-      const [eventLogPath, setEventLogPath] = useState(DEFAULT_EVENT_LOG);
-      const [stateLogPath, setStateLogPath] = useState('');
-      const [positionId, setPositionId] = useState('');
-      const [status, setStatus] = useState('');
-      const [metadata, setMetadata] = useState(null);
+      const [eventLogOverride, setEventLogOverride] = useState('');
+      const [stateLogOverride, setStateLogOverride] = useState('');
+      const [positions, setPositions] = useState([]);
+      const [selectedPositionId, setSelectedPositionId] = useState('');
+      const [status, setStatus] = useState('Loading positions…');
+      const [positionData, setPositionData] = useState(null);
+      const [autoRefresh, setAutoRefresh] = useState(true);
+      const [refreshSeconds, setRefreshSeconds] = useState(DEFAULT_REFRESH_SECONDS);
 
-      const fetchData = async (manual = false) => {
+      const eventLogInfo = useMemo(() => eventLogOverride.trim(), [eventLogOverride]);
+      const stateLogInfo = useMemo(() => stateLogOverride.trim(), [stateLogOverride]);
+      const [metrics, setMetrics] = useState(null);
+
+      const loadPositions = async (showSpinner = true) => {
         try {
-          setStatus(manual ? 'Loading data…' : 'Auto-loading latest logs…');
-
-          const eventText = await fetch(eventLogPath).then(res => {
-            if (!res.ok) throw new Error('Unable to fetch event log');
-            return res.text();
-          });
-          const entries = parseEventLog(eventText);
-          if (!entries.length) throw new Error('No entries found in event log.');
-
-          const entry = positionId ? (entries.find(e => e.positionId === positionId) || entries.at(-1)) : entries.at(-1);
-
-          const eventDate = entry.timestamp.split('T')[0];
-          const derivedStatePath = stateLogPath || `../trade_logs/state_log_${eventDate}.csv`;
-
-          const stateText = await fetch(derivedStatePath).then(res => {
-            if (!res.ok) throw new Error('Unable to fetch state log');
-            return res.text();
-          });
-          const stateRows = parseCsv(stateText).filter(row => row.position_id === entry.positionId);
-          if (!stateRows.length) throw new Error('No matching rows in state log.');
-
-          const entryPrices = computeEntryPrices(stateRows);
-          const mtmSeries = computeMtmSeries(stateRows, entryPrices, entry.details.lot_size || 15);
-          const payoff = computePayoff(entry.details, entryPrices);
-
-          setMetadata({ entry, mtmSeries, payoff, entryPrices, stateRows });
-          setStatus(`Loaded position ${entry.positionId}`);
+          if (showSpinner) setStatus('Loading positions…');
+          const response = await fetch(`/api/positions${buildQuery({ event_log: eventLogInfo })}`);
+          if (!response.ok) throw new Error('Unable to load positions');
+          const payload = await response.json();
+          setPositions(payload.positions ?? []);
+          if (payload.positions?.length) {
+            setSelectedPositionId(prev => prev || payload.default_position_id || payload.positions.at(-1).position_id);
+            setStatus(`Loaded ${payload.positions.length} positions`);
+          } else {
+            setSelectedPositionId('');
+            setStatus('No ENTRY events found.');
+          }
         } catch (error) {
           console.error(error);
-          setStatus(error.message || 'Failed to load data.');
-          setMetadata(null);
+          setStatus(error.message || 'Failed to load positions');
+          setPositions([]);
+          setSelectedPositionId('');
         }
       };
 
-      useEffect(() => { fetchData(false); }, []);
+      const loadPositionData = async (manual = true) => {
+        if (!selectedPositionId) {
+          setStatus('Select a position to load details.');
+          setPositionData(null);
+          return;
+        }
+
+        try {
+          setStatus(manual ? `Loading position ${selectedPositionId}…` : `Refreshing ${selectedPositionId}…`);
+          const response = await fetch(`/api/position/${encodeURIComponent(selectedPositionId)}${buildQuery({ event_log: eventLogInfo, state_log: stateLogInfo })}`);
+          if (!response.ok) {
+            const message = await response.text();
+            throw new Error(message || 'Failed to load position');
+          }
+          const payload = await response.json();
+          setPositionData(payload);
+          setStatus(`Last updated ${new Date(payload.last_updated).toLocaleString()}`);
+          setMetrics(calculateMetrics(payload));
+        } catch (error) {
+          console.error(error);
+          setStatus(error.message || 'Failed to load position');
+          setPositionData(null);
+          setMetrics(null);
+        }
+      };
+
       useEffect(() => {
-        if (!metadata) return;
-        const { mtmSeries, payoff } = metadata;
+        loadPositions(true);
+      }, []);
+
+      useEffect(() => {
+        loadPositionData(false);
+      }, [selectedPositionId]);
+
+      useEffect(() => {
+        if (!autoRefresh || !selectedPositionId) return undefined;
+        const seconds = Math.max(5, Number.parseInt(refreshSeconds, 10) || DEFAULT_REFRESH_SECONDS);
+        const interval = setInterval(() => loadPositionData(false), seconds * 1000);
+        return () => clearInterval(interval);
+      }, [autoRefresh, selectedPositionId, refreshSeconds, eventLogInfo, stateLogInfo]);
+
+      useEffect(() => {
+        if (!positionData) return;
+        const { mtm_series: mtmSeries, payoff, position } = positionData;
 
         const mtmTrace = {
-          x: mtmSeries.map(pt => pt.timestamp),
-          y: mtmSeries.map(pt => pt.mtm),
+          x: mtmSeries.map(pt => new Date(pt.timestamp)),
+          y: mtmSeries.map(pt => pt.mtm ?? null),
           mode: 'lines+markers',
           name: 'MTM (₹)',
-          line: { color: '#38bdf8', width: 2 },
-          marker: { color: '#0ea5e9' },
+          line: { color: '#2563eb', width: 3, shape: 'spline', smoothing: 1.2 },
+          marker: { color: '#1d4ed8', size: 6 },
+          connectgaps: true,
+          fill: 'tozeroy',
+          fillcolor: 'rgba(37, 99, 235, 0.12)',
+          hovertemplate: '<b>%{x|%d %b, %I:%M %p}</b><br>MTM: %{y:,.0f}₹<extra></extra>',
         };
+
+        const mtmLayout = {
+          margin: { t: 24, r: 24, l: 70, b: 60 },
+          paper_bgcolor: '#ffffff',
+          plot_bgcolor: '#f8fafc',
+          height: 420,
+          xaxis: {
+            title: 'Timestamp',
+            showgrid: true,
+            gridcolor: 'rgba(226, 232, 240, 0.8)',
+            tickfont: { color: '#475569' },
+            titlefont: { color: '#334155' },
+            zeroline: false,
+          },
+          yaxis: {
+            title: 'Mark-to-Market (₹)',
+            showgrid: true,
+            zeroline: true,
+            zerolinecolor: 'rgba(37, 99, 235, 0.25)',
+            gridcolor: 'rgba(226, 232, 240, 0.8)',
+            tickfont: { color: '#475569' },
+            titlefont: { color: '#334155' },
+          },
+          hovermode: 'x unified',
+          legend: {
+            orientation: 'h',
+            y: 1.12,
+            x: 0,
+            font: { color: '#1f2937' },
+          },
+        };
+
+        if (metrics?.drawdown_series) {
+          const ddTrace = {
+            x: metrics.drawdown_series.map(pt => new Date(pt.timestamp)),
+            y: metrics.drawdown_series.map(pt => pt.drawdown),
+            mode: 'lines',
+            name: 'Drawdown',
+            line: { color: '#f97316', width: 2, dash: 'dash' },
+            yaxis: 'y2',
+            hovertemplate: '%{y:.0f}₹ drawdown<extra></extra>',
+          };
+          mtmLayout.yaxis2 = {
+            overlaying: 'y',
+            side: 'right',
+            showgrid: false,
+            tickfont: { color: '#ea580c' },
+            titlefont: { color: '#ea580c' },
+            title: 'Drawdown (₹)',
+          };
+          Plotly.react('mtm-chart', [mtmTrace, ddTrace], mtmLayout, { displayModeBar: false });
+        } else {
+          Plotly.react('mtm-chart', [mtmTrace], mtmLayout, { displayModeBar: false });
+        }
+
         const payoffTrace = {
-          x: payoff.map(pt => pt.price),
+          x: payoff.map(pt => pt.underlying),
           y: payoff.map(pt => pt.payoff),
           mode: 'lines',
           name: 'Payoff @ Expiry',
-          line: { color: '#34d399', width: 2 },
+          line: { color: '#10b981', width: 3, shape: 'spline', smoothing: 1.1 },
+          fill: 'tozeroy',
+          fillcolor: 'rgba(16, 185, 129, 0.12)',
+          hovertemplate: 'Underlying: %{x}<br>Payoff: %{y:,.0f}₹<extra></extra>',
         };
 
-        Plotly.react('mtm-chart', [mtmTrace], {
-          margin: { t: 10, r: 16, l: 50, b: 60 },
-          paper_bgcolor: 'rgba(15,23,42,0.65)',
-          plot_bgcolor: 'rgba(15,23,42,0.45)',
-          xaxis: { title: 'Timestamp' },
-          yaxis: { title: 'Mark-to-Market (₹)' },
-        }, { displayModeBar: false });
+        const payoffBreakeven = (metrics?.breakeven_prices ?? []).map(price => ({
+          x: [price, price],
+          y: [Math.min(...payoff.map(pt => pt.payoff)), Math.max(...payoff.map(pt => pt.payoff))],
+          mode: 'lines',
+          line: { dash: 'dash', color: 'rgba(148, 163, 184, 0.4)' },
+          name: `Breakeven ${price}`,
+          hoverinfo: 'skip',
+          showlegend: false,
+        }));
 
-        Plotly.react('payoff-chart', [payoffTrace], {
-          margin: { t: 10, r: 16, l: 50, b: 60 },
-          paper_bgcolor: 'rgba(15,23,42,0.65)',
-          plot_bgcolor: 'rgba(15,23,42,0.45)',
-          xaxis: { title: 'Underlying Price' },
-          yaxis: { title: 'Payoff at Expiry (₹)' },
-        }, { displayModeBar: false });
-      }, [metadata]);
+        const payoffLayout = {
+          margin: { t: 24, r: 24, l: 70, b: 60 },
+          paper_bgcolor: '#ffffff',
+          plot_bgcolor: '#f8fafc',
+          height: 420,
+          xaxis: {
+            title: 'Underlying Price',
+            showgrid: true,
+            gridcolor: 'rgba(226, 232, 240, 0.8)',
+            tickfont: { color: '#475569' },
+            titlefont: { color: '#334155' },
+          },
+          yaxis: {
+            title: 'Payoff at Expiry (₹)',
+            zeroline: true,
+            zerolinecolor: 'rgba(16, 185, 129, 0.25)',
+            showgrid: true,
+            gridcolor: 'rgba(226, 232, 240, 0.8)',
+            tickfont: { color: '#475569' },
+            titlefont: { color: '#334155' },
+          },
+          hovermode: 'x unified',
+          shapes: (metrics?.breakeven_prices ?? []).map(price => ({
+            type: 'line',
+            x0: price,
+            x1: price,
+            y0: Math.min(...payoff.map(pt => pt.payoff)),
+            y1: Math.max(...payoff.map(pt => pt.payoff)),
+            line: { dash: 'dash', color: 'rgba(148, 163, 184, 0.25)' },
+          })),
+        };
 
-      return (
-        React.createElement('div', { className: 'dashboard' },
+        Plotly.react('payoff-chart', [payoffTrace, ...payoffBreakeven], payoffLayout, { displayModeBar: false });
+
+        if (!document.getElementById('position-details')) return;
+      }, [positionData]);
+
+      const renderPositionOptions = () => positions.map(item => (
+        React.createElement('option', { key: item.position_id, value: item.position_id }, `${item.position_id} – ${item.timestamp}`)
+      ));
+
+      const toggleAutoRefresh = () => setAutoRefresh(prev => !prev);
+
+      return React.createElement('div', { className: 'dashboard' },
           React.createElement('div', { className: 'card' },
-            React.createElement('h2', null, 'Data Sources'),
+          React.createElement('h2', null, 'Data Feeds'),
             React.createElement('div', { className: 'grid-two' },
               React.createElement('div', null,
-                React.createElement('label', { htmlFor: 'eventLog' }, 'Event Log CSV'),
+              React.createElement('label', { htmlFor: 'eventLogInput' }, 'Event Log Path (optional)'),
                 React.createElement('input', {
-                  id: 'eventLog',
-                  value: eventLogPath,
-                  onChange: e => setEventLogPath(e.target.value),
+                id: 'eventLogInput',
+                value: eventLogOverride,
+                onChange: e => setEventLogOverride(e.target.value),
                   placeholder: '../trade_logs/event_log_YYYY-MM.csv',
                 })
               ),
               React.createElement('div', null,
-                React.createElement('label', { htmlFor: 'stateLog' }, 'State Log CSV (optional)'),
+              React.createElement('label', { htmlFor: 'stateLogInput' }, 'State Log Path (optional)'),
                 React.createElement('input', {
-                  id: 'stateLog',
-                  value: stateLogPath,
-                  onChange: e => setStateLogPath(e.target.value),
+                id: 'stateLogInput',
+                value: stateLogOverride,
+                onChange: e => setStateLogOverride(e.target.value),
                   placeholder: '../trade_logs/state_log_YYYY-MM-DD.csv',
                 })
               ),
               React.createElement('div', null,
-                React.createElement('label', { htmlFor: 'positionId' }, 'Position ID (optional)'),
+              React.createElement('label', { htmlFor: 'positionSelect' }, 'Position'),
+              React.createElement('select', {
+                id: 'positionSelect',
+                value: selectedPositionId,
+                onChange: e => setSelectedPositionId(e.target.value),
+              },
+                renderPositionOptions()
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('label', { htmlFor: 'refreshSeconds' }, 'Refresh (seconds)'),
                 React.createElement('input', {
-                  id: 'positionId',
-                  value: positionId,
-                  onChange: e => setPositionId(e.target.value),
-                  placeholder: 'BNF_IFLY_YYYYMMDD_HHMMSS',
+                id: 'refreshSeconds',
+                type: 'number',
+                min: 5,
+                value: refreshSeconds,
+                onChange: e => setRefreshSeconds(e.target.value),
                 })
               ),
               React.createElement('div', null,
-                React.createElement('label', { htmlFor: 'reloadBtn' }, 'Action'),
-                React.createElement('button', { id: 'reloadBtn', onClick: () => fetchData(true) }, 'Reload Data')
-              ),
+              React.createElement('label', { htmlFor: 'autoRefreshToggle' }, 'Auto Refresh'),
+              React.createElement('button', {
+                id: 'autoRefreshToggle',
+                onClick: toggleAutoRefresh,
+              }, autoRefresh ? 'Disable Auto Refresh' : 'Enable Auto Refresh')
             ),
-            React.createElement('div', { className: 'status' }, status)
+            React.createElement('div', null,
+              React.createElement('label', { htmlFor: 'refreshPositions' }, 'Actions'),
+              React.createElement('div', { style: { display: 'flex', gap: '8px' } },
+                React.createElement('button', { id: 'refreshPositions', onClick: () => loadPositions(true) }, 'Reload Positions'),
+                React.createElement('button', { onClick: () => loadPositionData(true) }, 'Refresh Charts')
+              )
+            )
           ),
+          React.createElement('div', { className: 'status' }, status)
+        ),
 
-          metadata && React.createElement('div', { className: 'grid-two' },
-            React.createElement('div', { className: 'card' },
+        positionData ? React.createElement('div', { className: 'grid-two' },
+          React.createElement('div', { className: 'card', id: 'position-details' },
               React.createElement('h2', null, 'Position Snapshot'),
               React.createElement('ul', { className: 'metadata-list' },
-                React.createElement('li', null, `Position ID: ${metadata.entry.positionId}`),
-                React.createElement('li', null, `Entry Time: ${metadata.entry.timestamp}`),
-                React.createElement('li', null, `Expiry: ${metadata.entry.details.expiry}`),
-                React.createElement('li', null, `ATM Strike: ${metadata.entry.details.atm_strike}`),
-                React.createElement('li', null, `Wing Distance: ${metadata.entry.details.wing_distance} pts`),
-                React.createElement('li', null, `Lot Size: ${metadata.entry.details.lot_size}`),
+              React.createElement('li', null, `Position ID: ${positionData.position.position_id}`),
+              React.createElement('li', null, `Entry Time: ${positionData.position.timestamp}`),
+              React.createElement('li', null, `Expiry: ${positionData.position.details.expiry}`),
+              React.createElement('li', null, `ATM Strike: ${positionData.position.details.atm_strike}`),
+              React.createElement('li', null, `Wing Distance: ${positionData.position.details.wing_distance} pts`),
+              React.createElement('li', null, `Lot Size: ${positionData.position.details.lot_size}`),
+              React.createElement('li', null, `Event Log: ${positionData.event_log_path}`),
+              React.createElement('li', null, `State Log: ${positionData.state_log_path}`),
               )
             ),
             React.createElement('div', { className: 'card charts' },
+            metrics ? React.createElement('div', { className: 'metrics-grid' },
+              React.createElement('div', { className: 'metric-tile' },
+                React.createElement('h4', null, 'Net MTM'),
+                React.createElement('div', { className: 'metric-value' }, `${formatCurrency(metrics.net_mtm)}`),
+                React.createElement('div', { className: 'metric-sub' }, 'Current unrealised P&L')
+              ),
+              React.createElement('div', { className: 'metric-tile' },
+                React.createElement('h4', null, 'Max MTM'),
+                React.createElement('div', { className: 'metric-value' }, `${formatCurrency(metrics.max_mtm)}`),
+                metrics.max_mtm_time ? React.createElement('div', { className: 'metric-sub' }, `Peak at ${new Date(metrics.max_mtm_time).toLocaleTimeString()}`) : React.createElement('div', { className: 'metric-sub' }, 'Peak mark-to-market'),
+              ),
+              React.createElement('div', { className: 'metric-tile' },
+                React.createElement('h4', null, 'Max Drawdown'),
+                React.createElement('div', { className: 'metric-value' }, `${formatCurrency(metrics.max_drawdown)}`),
+                React.createElement('div', { className: 'metric-sub' }, metrics.max_dd_time ? `Occurred ${new Date(metrics.max_dd_time).toLocaleTimeString()}` : '—')
+              ),
+              React.createElement('div', { className: 'metric-tile' },
+                React.createElement('h4', null, 'Entry Credit'),
+                React.createElement('div', { className: 'metric-value' }, `${formatCurrency(metrics.initial_credit)}`),
+                React.createElement('div', { className: 'metric-sub' }, 'Sum of short premiums minus longs')
+              ),
+              React.createElement('div', { className: 'metric-tile' },
+                React.createElement('h4', null, 'Breakevens'),
+                React.createElement('div', { className: 'metric-value' }, metrics.breakeven_prices?.length ? metrics.breakeven_prices.join(' / ') : '—'),
+                React.createElement('div', { className: 'metric-sub' }, 'Expiry breakeven strikes')
+              )
+            ) : null,
               React.createElement('div', { className: 'chart-box' },
                 React.createElement('h3', null, 'Mark-to-Market Timeline'),
                 React.createElement('div', { id: 'mtm-chart', style: { height: '320px' } })
@@ -384,11 +609,8 @@
                 React.createElement('div', { id: 'payoff-chart', style: { height: '320px' } })
               )
             )
-          ),
-
-          !metadata && React.createElement('div', { className: 'card' },
-            React.createElement('p', null, 'No data to display. Provide valid log paths and reload.')
-          )
+        ) : React.createElement('div', { className: 'card' },
+          React.createElement('p', null, 'No data to display. Use Reload Positions or Refresh Charts once a position is available.')
         )
       );
     }

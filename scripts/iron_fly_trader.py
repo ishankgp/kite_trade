@@ -88,6 +88,7 @@ class IronFlyTrader:
         self.current_plan: Optional[Dict[str, Any]] = None
         self.last_state_log_time: Optional[datetime] = None
         self.last_llm_confidence: Optional[float] = None
+        self.entry_prices: Dict[str, float] = {}
         self.load_instruments()
 
     # ------------------------------------------------------------------
@@ -431,6 +432,7 @@ class IronFlyTrader:
         logging.info(f"Logged ENTRY event for position {position_id}")
         self.position_id = position_id
         self.last_state_log_time = None
+        self.entry_prices = {}
 
     def log_state_snapshot(self, spot_price: float) -> None:
         if not self.current_plan or not self.position_id:
@@ -439,26 +441,58 @@ class IronFlyTrader:
             legs = self.current_plan['legs']
             quote_keys = [f"{config.OPTION_EXCHANGE}:{symbol}" for symbol in legs.values()]
             quotes = self.kite.quote(quote_keys)
+            leg_prices: Dict[str, Optional[float]] = {}
+            for leg_name, symbol in legs.items():
+                key = f"{config.OPTION_EXCHANGE}:{symbol}"
+                leg_prices[leg_name] = quotes.get(key, {}).get('last_price')
+
+            if not self.entry_prices:
+                for leg_name, price in leg_prices.items():
+                    if price is not None:
+                        self.entry_prices[leg_name] = float(price)
+
+            unrealized_pnl = self.calculate_unrealized_pnl(leg_prices)
+
             snapshot = {
                 "timestamp": datetime.now().isoformat(),
                 "position_id": self.position_id,
                 "banknifty_spot": spot_price,
-                "unrealized_pnl": "N/A",
+                "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else "N/A",
                 "position_delta": "N/A",
                 "short_call_symbol": legs['short_call'],
-                "short_call_ltp": quotes.get(f"{config.OPTION_EXCHANGE}:{legs['short_call']}", {}).get('last_price'),
+                "short_call_ltp": leg_prices['short_call'],
                 "short_call_delta": "N/A",
                 "short_put_symbol": legs['short_put'],
-                "short_put_ltp": quotes.get(f"{config.OPTION_EXCHANGE}:{legs['short_put']}", {}).get('last_price'),
+                "short_put_ltp": leg_prices['short_put'],
                 "short_put_delta": "N/A",
                 "long_call_symbol": legs['long_call'],
-                "long_call_ltp": quotes.get(f"{config.OPTION_EXCHANGE}:{legs['long_call']}", {}).get('last_price'),
+                "long_call_ltp": leg_prices['long_call'],
                 "long_put_symbol": legs['long_put'],
-                "long_put_ltp": quotes.get(f"{config.OPTION_EXCHANGE}:{legs['long_put']}", {}).get('last_price')
+                "long_put_ltp": leg_prices['long_put']
             }
             self.state_logger.info(",".join(str(snapshot[col]) for col in ['timestamp','position_id','banknifty_spot','unrealized_pnl','position_delta','short_call_symbol','short_call_ltp','short_call_delta','short_put_symbol','short_put_ltp','short_put_delta','long_call_symbol','long_call_ltp','long_put_symbol','long_put_ltp']))
+            self.last_state_log_time = datetime.now()
         except Exception as e:
             logging.warning(f"Failed to log state snapshot: {e}")
+
+    def calculate_unrealized_pnl(self, leg_prices: Dict[str, Optional[float]]) -> Optional[float]:
+        if not self.current_plan:
+            return None
+        required_legs = ['short_call', 'short_put', 'long_call', 'long_put']
+        lot_size = self.current_plan.get('lot_size', self.lot_size)
+        quantity = lot_size * config.MAX_SETS
+
+        total_pnl = 0.0
+        for leg_name in required_legs:
+            entry_price = self.entry_prices.get(leg_name)
+            current_price = leg_prices.get(leg_name)
+            if entry_price is None or current_price is None:
+                return None
+            if leg_name.startswith('short_'):
+                total_pnl += (entry_price - current_price) * quantity
+            else:
+                total_pnl += (current_price - entry_price) * quantity
+        return total_pnl
 
     def evaluate_and_execute_entry(self, plan: Dict[str, Any]) -> bool:
         if not self.is_trading_window_open():
@@ -490,7 +524,26 @@ class IronFlyTrader:
             return False
 
         self.log_state_snapshot(spot)
+        self.monitor_position()
         return True
+
+    def monitor_position(self) -> None:
+        if not self.current_plan or not self.position_id:
+            return
+
+        duration = timedelta(minutes=config.STATE_MONITOR_DURATION_MINUTES)
+        end_time = datetime.now() + duration
+        interval = max(1, int(config.STATE_LOG_INTERVAL_SECONDS))
+
+        logging.info(f"Starting state monitoring for {self.position_id} for {duration} (interval {interval}s).")
+        while datetime.now() < end_time:
+            time.sleep(interval)
+            spot = self.get_spot_price()
+            if spot is None:
+                logging.debug("Skipping state snapshot; spot price unavailable.")
+                continue
+            self.log_state_snapshot(spot)
+        logging.info(f"Completed state monitoring for {self.position_id}.")
 
 
 def main():

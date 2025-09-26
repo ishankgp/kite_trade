@@ -44,3 +44,7 @@ LLM_NOOP_ON_ERROR = True
 PROFIT_TARGET_PERCENT = 0.40  # Placeholder - to be calculated via MTM engine
 STOP_LOSS_PERCENT = 0.20
 DELTA_BREACH_THRESHOLD = 0.35
+
+# --- STATE LOGGING ---
+STATE_MONITOR_DURATION_MINUTES = 120  # Total duration to keep polling after entry
+STATE_LOG_INTERVAL_SECONDS = 60       # Poll interval for state snapshots

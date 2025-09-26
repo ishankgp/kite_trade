@@ -158,6 +158,23 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+### Live Iron Fly Dashboard
+
+A lightweight Flask + Plotly UI lets you monitor simulated positions in real time.
+
+```bash
+# 1. Activate your virtualenv and install deps
+pip install -r requirements.txt
+
+# 2. Start the dashboard API + UI
+python dashboard/server.py
+
+# 3. Open the dashboard in your browser
+http://localhost:5050
+```
+
+The HTML app will auto-poll the API (default 30s) to refresh the MTM timeline and expiry payoff. Use the controls at the top to select a position or override log paths when replaying older sessions.
+
 ## 📚 Kite API Documentation
 
 - **Official Docs**: https://kite.trade/docs/connect/v3/
