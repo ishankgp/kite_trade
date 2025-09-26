@@ -6,7 +6,8 @@ import os
 from functools import lru_cache
 from typing import List
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

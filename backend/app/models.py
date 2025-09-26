@@ -65,6 +65,7 @@ class TrainingRequest(BaseModel):
     walkforward_train_bars: int = 300
     walkforward_test_bars: int = 60
     step_size: Optional[int] = None
+    stream: bool = False
 
 
 class TrainingModelResult(BaseModel):

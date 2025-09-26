@@ -1,12 +1,35 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Loader2, Play, Wand2 } from "lucide-react";
-import { useRunTraining, TrainingRunResponse } from "../hooks/useTraining";
+import { TrainingRunResponse, TrainingModelResult } from "../hooks/useTraining";
 
 const MODEL_OPTIONS = [
   { id: "random_forest", label: "Random Forest" },
   { id: "xgboost", label: "XGBoost" },
   { id: "prophet", label: "Prophet" },
 ];
+
+type TrainingEvent =
+  | { type: "start"; models: string[]; total_folds: number }
+  | { type: "model_start"; model: string; total_folds: number }
+  | { type: "model_skipped"; model: string; reason: string }
+  | {
+      type: "fold";
+      model: string;
+      data: {
+        fold: number;
+        total_folds: number;
+        train_start: string;
+        train_end: string;
+        test_start: string;
+        test_end: string;
+        rmse: number;
+        mae: number;
+        mape: number | null;
+      };
+    }
+  | { type: "model_complete"; model: string; metrics: Record<string, number> }
+  | { type: "complete"; results: TrainingRunResponse }
+  | { type: "error"; message: string };
 
 function TrainingPage() {
   const [instrumentToken, setInstrumentToken] = useState("256265");
@@ -17,13 +40,29 @@ function TrainingPage() {
   const [testBars, setTestBars] = useState(60);
   const [selectedModels, setSelectedModels] = useState<string[]>(["random_forest", "xgboost"]);
 
-  const mutation = useRunTraining();
+  const [isRunning, setIsRunning] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [progressCompleted, setProgressCompleted] = useState(0);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [foldEvents, setFoldEvents] = useState<TrainingEvent[]>([]);
+  const [results, setResults] = useState<TrainingRunResponse | null>(null);
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!instrumentToken) return;
 
-    mutation.mutate({
+    setIsRunning(true);
+    setStatusMessage("Preparing training run...");
+    setErrorMessage(null);
+    setProgressCompleted(0);
+    setProgressTotal(0);
+    setCurrentModel(null);
+    setFoldEvents([]);
+    setResults(null);
+
+    startStreamingRun({
       instrument_token: Number(instrumentToken),
       interval,
       models: selectedModels,
@@ -31,10 +70,106 @@ function TrainingPage() {
       lookback_window: lookbackWindow,
       walkforward_train_bars: trainBars,
       walkforward_test_bars: testBars,
+      step_size: undefined,
+    }).catch((error) => {
+      console.error(error);
+      setErrorMessage(error.message ?? "Training failed");
+      setIsRunning(false);
+      setStatusMessage(null);
     });
   };
 
-  const lastRun: TrainingRunResponse | undefined = mutation.data;
+  const startStreamingRun = async (payload: {
+    instrument_token: number;
+    interval: string;
+    models: string[];
+    forecast_horizon: number;
+    lookback_window: number;
+    walkforward_train_bars: number;
+    walkforward_test_bars: number;
+    step_size?: number | undefined;
+  }) => {
+    const response = await fetch("/api/training/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, stream: true }),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Training request failed (${response.status})`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const processEvent = (event: TrainingEvent) => {
+      switch (event.type) {
+        case "start":
+          setStatusMessage("Initializing models...");
+          setProgressTotal(event.total_folds * event.models.length);
+          setProgressCompleted(0);
+          break;
+        case "model_start":
+          setCurrentModel(event.model);
+          setStatusMessage(`Running ${event.model.replace("_", " ")}...`);
+          break;
+        case "model_skipped":
+          setFoldEvents((prev) => [...prev, event]);
+          break;
+        case "fold":
+          setFoldEvents((prev) => [...prev, event]);
+          setProgressCompleted((prev) => Math.min(prev + 1, progressTotal));
+          setStatusMessage(
+            `Model ${event.model.replace("_", " ")} · fold ${event.data.fold}/${event.data.total_folds}`
+          );
+          break;
+        case "model_complete":
+          setFoldEvents((prev) => [...prev, event]);
+          setStatusMessage(`${event.model.replace("_", " ")} complete`);
+          break;
+        case "complete":
+          setStatusMessage("Training finished");
+          setResults(event.results);
+          setIsRunning(false);
+          break;
+        case "error":
+          setErrorMessage(event.message);
+          setIsRunning(false);
+          setStatusMessage(null);
+          break;
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const chunk = buffer.slice(0, boundary).trim();
+        buffer = buffer.slice(boundary + 2);
+        if (chunk.startsWith("data:")) {
+          const payload = chunk.replace(/^data:\s*/, "");
+          try {
+            const parsed = JSON.parse(payload) as TrainingEvent;
+            processEvent(parsed);
+          } catch (error) {
+            console.error("Failed to parse training event", error, payload);
+          }
+        }
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+
+    setIsRunning(false);
+    setStatusMessage((prev) => (prev ? `${prev} (idle)` : null));
+  };
+
+  const progressPercent = progressTotal > 0 ? Math.min(100, Math.round((progressCompleted / progressTotal) * 100)) : 0;
+
+  const lastRun = results;
 
   return (
     <div className="space-y-8">
@@ -143,22 +278,80 @@ function TrainingPage() {
             <button
               type="submit"
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-              disabled={mutation.isPending}
+              disabled={isRunning}
             >
-              {mutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
+              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               Run training
             </button>
           </div>
         </form>
       </section>
 
-      {mutation.isError && (
+      {(isRunning || statusMessage) && (
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{statusMessage ?? "Waiting for status..."}</span>
+            <span>{progressPercent}%</span>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-blue-100">
+            <div
+              className="h-2 rounded-full bg-blue-600 transition-all"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {errorMessage && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
-          Training failed: {(mutation.error as Error).message}
+          Training failed: {errorMessage}
+        </div>
+      )}
+
+      {foldEvents.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Live metrics</h3>
+          <div className="mt-3 grid gap-2 text-xs text-slate-600">
+            {foldEvents.map((event, index) => {
+              if (event.type === "fold") {
+                return (
+                  <div
+                    key={`${event.model}-fold-${event.data.fold}-${index}`}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-800">
+                        {event.model.replace("_", " ")} · Fold {event.data.fold}/{event.data.total_folds}
+                      </span>
+                      <span>
+                        RMSE {event.data.rmse.toFixed(3)} · MAE {event.data.mae.toFixed(3)} · MAPE {event.data.mape?.toFixed(2) ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+              if (event.type === "model_complete") {
+                return (
+                  <div key={`${event.model}-complete-${index}`} className="rounded-lg border border-blue-200 bg-blue-50 p-2">
+                    <span className="font-semibold text-blue-700">{event.model.replace("_", " ")} complete</span>
+                    <span className="ml-2 text-blue-600">
+                      RMSE {event.metrics.rmse.toFixed(3)} · MAE {event.metrics.mae.toFixed(3)} · MAPE {Number.isFinite(event.metrics.mape) ? event.metrics.mape.toFixed(2) : "—"}
+                    </span>
+                  </div>
+                );
+              }
+              if (event.type === "model_skipped") {
+                return (
+                  <div key={`${event.model}-skipped-${index}`} className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+                    <span className="font-semibold text-amber-700">{event.model.replace("_", " ")} skipped:</span>
+                    <span className="ml-2 text-amber-600">{event.reason}</span>
+                  </div>
+                );
+              }
+              return null;
+            })}
+            {foldEvents.length === 0 && <p className="text-slate-500">Waiting for metrics...</p>}
+          </div>
         </div>
       )}
 

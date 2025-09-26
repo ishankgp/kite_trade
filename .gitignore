@@ -60,3 +60,12 @@ Thumbs.db
 historical_data/
 backtest_results/
 trade_logs/
+
+# Frontend build artifacts and dependencies
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.next/
+frontend/.cache/
+frontend/npm-debug.log
+frontend/yarn-error.log

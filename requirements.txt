@@ -3,8 +3,10 @@ python-dotenv==1.0.1
 pandas==2.3.1
 matplotlib==3.9.2
 plotly==6.3.0
+pydantic-settings==2.2.1
 Flask==3.0.3
 scikit-learn==1.5.2
 joblib==1.4.2
 xgboost==2.1.1
 prophet==1.1.5
+cmdstanpy==1.2.4

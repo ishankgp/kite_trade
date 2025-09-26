@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
-from typing import Optional
+from typing import AsyncGenerator, Dict, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from .config import get_settings
 from .database import get_connection, init_db
@@ -149,6 +151,45 @@ def analytics_technicals(
 
 @app.post("/training/run", tags=["training"], response_model=TrainingRunResponse)
 def run_training(request: TrainingRequest):
+    if request.stream:
+        async def event_stream() -> AsyncGenerator[str, None]:
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue[Dict[str, object]] = asyncio.Queue()
+
+            def push_event(event: Dict[str, object]) -> None:
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+
+            async def producer() -> None:
+                def run_job() -> None:
+                    try:
+                        run_training_job(
+                            instrument_token=request.instrument_token,
+                            interval=request.interval,
+                            models=request.models,
+                            forecast_horizon=request.forecast_horizon,
+                            lookback_window=request.lookback_window,
+                            walkforward_train_bars=request.walkforward_train_bars,
+                            walkforward_test_bars=request.walkforward_test_bars,
+                            step_size=request.step_size,
+                            progress_cb=push_event,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        push_event({"type": "error", "message": str(exc)})
+                    finally:
+                        push_event({"type": "_end"})
+
+                await loop.run_in_executor(None, run_job)
+
+            asyncio.create_task(producer())
+
+            while True:
+                event = await queue.get()
+                if event.get("type") == "_end":
+                    break
+                yield f"data: {json.dumps(_prepare_event_payload(event))}\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
     try:
         results = run_training_job(
             instrument_token=request.instrument_token,
@@ -163,34 +204,32 @@ def run_training(request: TrainingRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    model_results = [
-        TrainingModelResult(
-            model_name=name,
-            metrics_overall=data["metrics_overall"],
-            walk_forward=[
-                WalkForwardMetric(
-                    fold=fold["fold"],
-                    train_start=fold["train_start"],
-                    train_end=fold["train_end"],
-                    test_start=fold["test_start"],
-                    test_end=fold["test_end"],
-                    rmse=fold["rmse"],
-                    mae=fold["mae"],
-                    mape=None if isinstance(fold["mape"], float) and np.isnan(fold["mape"]) else fold["mape"],
-                )
-                for fold in data["walk_forward"]
-            ],
-            artifact_path=data["artifact_path"],
-            training_time_seconds=data["training_time_seconds"],
-        )
-        for name, data in results.items()
-    ]
-
     return TrainingRunResponse(
         instrument_token=request.instrument_token,
         interval=request.interval,
         forecast_horizon=request.forecast_horizon,
-        models=model_results,
+        models=[
+            TrainingModelResult(
+                model_name=name,
+                metrics_overall=data["metrics_overall"],
+                walk_forward=[
+                    WalkForwardMetric(
+                        fold=fold["fold"],
+                        train_start=fold["train_start"],
+                        train_end=fold["train_end"],
+                        test_start=fold["test_start"],
+                        test_end=fold["test_end"],
+                        rmse=fold["rmse"],
+                        mae=fold["mae"],
+                        mape=fold.get("mape"),
+                    )
+                    for fold in data["walk_forward"]
+                ],
+                artifact_path=data["artifact_path"],
+                training_time_seconds=data["training_time_seconds"],
+            )
+            for name, data in results.items()
+        ],
     )
 
 

@@ -6,7 +6,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import joblib
 import numpy as np
@@ -14,7 +14,6 @@ import pandas as pd
 from prophet import Prophet
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -176,6 +175,26 @@ def save_model(model, instrument_token: int, interval: str, model_name: str) -> 
     return path
 
 
+def _build_fold_plan(
+    total_rows: int,
+    train_bars: int,
+    test_bars: int,
+    step_size: Optional[int],
+) -> List[tuple[int, int, int]]:
+    plan: List[tuple[int, int, int]] = []
+    step = step_size or test_bars
+    start_idx = 0
+    while True:
+        train_start = start_idx
+        train_end = train_start + train_bars
+        test_end = train_end + test_bars
+        if test_end > total_rows:
+            break
+        plan.append((train_start, train_end, test_end))
+        start_idx += step
+    return plan
+
+
 def run_training_job(
     instrument_token: int,
     interval: str,
@@ -185,6 +204,7 @@ def run_training_job(
     walkforward_train_bars: int,
     walkforward_test_bars: int,
     step_size: Optional[int] = None,
+    progress_cb: Optional[Callable[[Dict[str, object]], None]] = None,
 ) -> Dict[str, Dict[str, object]]:
     df = load_price_frame(instrument_token, interval)
     if len(df) < walkforward_train_bars + walkforward_test_bars + 10:
@@ -193,20 +213,31 @@ def run_training_job(
     feature_df = engineer_features(df, forecast_horizon, lookback_window)
     feature_columns = [col for col in feature_df.columns if col not in {"timestamp", "target"}]
 
-    X = feature_df[feature_columns]
-    y = feature_df["target"]
+    fold_plan = _build_fold_plan(len(feature_df), walkforward_train_bars, walkforward_test_bars, step_size)
+    if not fold_plan:
+        raise ValueError("Unable to build walk-forward folds; adjust train/test sizes")
+
+    total_folds = len(fold_plan)
+
+    def emit(event: Dict[str, object]) -> None:
+        if progress_cb:
+            progress_cb(event)
+
+    emit({"type": "start", "models": models, "total_folds": total_folds})
 
     results: Dict[str, Dict[str, object]] = {}
 
     for model_name in models:
         start_time = time.time()
         fold_metrics: List[Dict[str, object]] = []
-        artifacts: Optional[str] = None
+        artifact_path: Optional[str] = None
 
-        for fold_idx, (train_df, test_df) in enumerate(
-            split_walk_forward(feature_df, walkforward_train_bars, walkforward_test_bars, step_size),
-            start=1,
-        ):
+        emit({"type": "model_start", "model": model_name, "total_folds": total_folds})
+
+        for fold_idx, (train_start, train_end, test_end) in enumerate(fold_plan, start=1):
+            train_df = feature_df.iloc[train_start:train_end]
+            test_df = feature_df.iloc[train_end:test_end]
+
             X_train = train_df[feature_columns]
             y_train = train_df["target"]
             X_test = test_df[feature_columns]
@@ -218,7 +249,8 @@ def run_training_job(
             elif model_name == "xgboost":
                 model = train_xgboost(X_train, y_train)
                 if model is None:
-                    continue
+                    emit({"type": "model_skipped", "model": model_name, "reason": "xgboost not installed"})
+                    break
                 preds = model.predict(X_test)
             elif model_name == "prophet":
                 prophet_model = train_prophet(train_df)
@@ -226,42 +258,94 @@ def run_training_job(
                 preds = forecast_prophet(prophet_model, len(test_df), freq)
                 model = prophet_model
             else:
-                continue
+                emit({"type": "model_skipped", "model": model_name, "reason": "unknown model"})
+                break
 
             metrics = evaluate_predictions(y_test.to_numpy(), preds)
-            fold_metrics.append(
-                {
-                    "fold": fold_idx,
-                    "train_start": train_df["timestamp"].iloc[0],
-                    "train_end": train_df["timestamp"].iloc[-1],
-                    "test_start": test_df["timestamp"].iloc[0],
-                    "test_end": test_df["timestamp"].iloc[-1],
-                    **metrics,
-                }
-            )
+
+            fold_data = {
+                "fold": fold_idx,
+                "total_folds": total_folds,
+                "train_start": train_df["timestamp"].iloc[0].to_pydatetime(),
+                "train_end": train_df["timestamp"].iloc[-1].to_pydatetime(),
+                "test_start": test_df["timestamp"].iloc[0].to_pydatetime(),
+                "test_end": test_df["timestamp"].iloc[-1].to_pydatetime(),
+                "rmse": metrics["rmse"],
+                "mae": metrics["mae"],
+                "mape": metrics["mape"],
+            }
+            fold_metrics.append(fold_data)
+
+            emit({"type": "fold", "model": model_name, "data": _serialize_fold(fold_data)})
 
         if not fold_metrics:
             continue
 
-        latest_model = model  # type: ignore
-        artifacts = save_model(latest_model, instrument_token, interval, model_name)
+        latest_model = model  # type: ignore[name-defined]
+        artifact_path = save_model(latest_model, instrument_token, interval, model_name)
 
         overall_rmse = float(np.mean([m["rmse"] for m in fold_metrics]))
         overall_mae = float(np.mean([m["mae"] for m in fold_metrics]))
         valid_mapes = [m["mape"] for m in fold_metrics if isinstance(m["mape"], (float, int)) and not np.isnan(m["mape"]) ]
         overall_mape = float(np.mean(valid_mapes)) if valid_mapes else float("nan")
 
+        metrics_overall = {
+            "rmse": overall_rmse,
+            "mae": overall_mae,
+            "mape": overall_mape,
+        }
+
         results[model_name] = {
-            "metrics_overall": {
-                "rmse": overall_rmse,
-                "mae": overall_mae,
-                "mape": overall_mape,
-            },
-            "walk_forward": fold_metrics,
-            "artifact_path": artifacts,
+            "metrics_overall": metrics_overall,
+            "walk_forward": [_serialize_fold(m) for m in fold_metrics],
+            "artifact_path": artifact_path,
             "training_time_seconds": time.time() - start_time,
         }
 
+        emit({"type": "model_complete", "model": model_name, "metrics": metrics_overall})
+
+    emit({"type": "complete", "results": _serialize_results(
+        instrument_token,
+        interval,
+        forecast_horizon,
+        results,
+    )})
+
     return results
+
+
+def _serialize_fold(fold: Dict[str, object]) -> Dict[str, object]:
+    data = dict(fold)
+    for key in ["train_start", "train_end", "test_start", "test_end"]:
+        value = data.get(key)
+        if hasattr(value, "isoformat"):
+            data[key] = value.isoformat()
+    if isinstance(data.get("mape"), float) and np.isnan(data["mape"]):
+        data["mape"] = None
+    return data
+
+
+def _serialize_results(
+    instrument_token: int,
+    interval: str,
+    forecast_horizon: int,
+    results: Dict[str, Dict[str, object]],
+) -> Dict[str, object]:
+    formatted_models: List[Dict[str, object]] = []
+    for model_name, payload in results.items():
+        model_entry = {
+            "model_name": model_name,
+            "metrics_overall": payload["metrics_overall"],
+            "walk_forward": payload["walk_forward"],
+            "artifact_path": payload["artifact_path"],
+            "training_time_seconds": payload["training_time_seconds"],
+        }
+        formatted_models.append(model_entry)
+    return {
+        "instrument_token": instrument_token,
+        "interval": interval,
+        "forecast_horizon": forecast_horizon,
+        "models": formatted_models,
+    }
 
 
